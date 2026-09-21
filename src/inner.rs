@@ -2128,7 +2128,7 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361Uninit<Spi, Rese
         refin_hz: u32,
         fdd: bool,
         tx: bool,
-    ) -> Result<(), Spi::Error> {
+    ) -> Result<(), InitError<Spi::Error>> {
         let cal_count = match fdd {
             true => u2::new(3),
             false => {
@@ -2245,6 +2245,7 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361Uninit<Spi, Rese
             .await?;
 
         self.0.write_register(cp_config, start_calib).await?;
+        let mut iterations = 0u32;
         loop {
             let cal_status_raw = self.0.read_register(cal_status).await?;
 
@@ -2264,7 +2265,15 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361Uninit<Spi, Rese
                     }
                 }
             }
+            if iterations >= 20_000 {
+                return Err(InitError::CalibrationTimeout(if tx {
+                    ModuleId::TxPll
+                } else {
+                    ModuleId::RxPll
+                }));
+            }
             self.0.delay.delay_us(120).await;
+            iterations += 1;
         }
         Ok(())
     }
