@@ -57,6 +57,20 @@ The following features have not been implemented yet. PRs or notifications for d
   [`defmt::Format`](https://defmt.ferrous-systems.com/format) derive on the register and
   configuration types.
 
+# Examples
+
+The [`bringup`](examples/bringup/main.rs) example initializes the driver with the blocking and
+the async API and prints the resulting clock configuration. It runs against a device mock of the
+AD9361, so it does not need hardware:
+
+```sh
+cargo run --example bringup
+```
+
+The [mock](examples/bringup/mock.rs) implements the SPI traits of `embedded-hal` and
+`embedded-hal-async`. The [sample configuration](examples/bringup/config.rs) is an example based
+on real hardware tests on a Zynq7000 based platform.
+
 # Tests
 
 Run the tests with all features enabled:
