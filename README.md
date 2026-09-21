@@ -1,14 +1,12 @@
 [![Crates.io](https://img.shields.io/crates/v/ad9361-embedded)](https://crates.io/crates/ad9361-embedded)
 [![docs.rs](https://img.shields.io/docsrs/ad9361-embedded)](https://docs.rs/ad9361-embedded)
-[![ci](https://github.com/us-irs/ad9361-embedded/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/us-irs/ad9361-embedded/actions/workflows/ci.yml)
+[![ci](https://github.com/ustgt-irs/ad9361-embedded/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ustgt-irs/ad9361-embedded/actions/workflows/ci.yml)
 
-ad9361-embedded - Platform agnostic AD9361 driver
+Pure-Rust AD9361 driver
 ======================
 
 `ad9361-embedded` is a `no_std` Rust driver for the
-[Analog Devices AD9361](https://www.analog.com/en/products/ad9361.html) RF agile transceiver. It
-is a Rust port of the AD9361 driver of the Analog Devices
-[no-OS](https://github.com/analogdevicesinc/no-OS) library.
+[Analog Devices AD9361](https://www.analog.com/en/products/ad9361.html) RF agile transceiver.
 
 The driver only depends on abstractions:
 

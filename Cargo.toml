@@ -6,6 +6,7 @@ rust-version = "1.88"
 authors = ["Robin Mueller <muellerr@irs.uni-stuttgart.de>"]
 description = "Platform agnostic AD9361 RF transceiver driver with blocking and async embedded-hal support"
 license = "(MIT OR Apache-2.0) AND BSD-3-Clause"
+repository = "https://github.com/ustgt-irs/ad9361-embedded"
 keywords = ["ad9361", "sdr", "transceiver", "embedded-hal", "no-std"]
 categories = ["embedded", "no-std", "hardware-support"]
 
@@ -26,3 +27,7 @@ axi-ad9361 = { version = "0.1", optional = true }
 default = ["axi-tune"]
 axi-tune = ["dep:axi-ad9361"]
 defmt = ["dep:defmt", "arbitrary-int/defmt"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--generate-link-to-definition"]

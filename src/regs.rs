@@ -1655,7 +1655,7 @@ pub mod parallel_port_conf_2 {
         /// Invert Rx Frame
         #[bit(2, rw)]
         invert_rx_frame: bool,
-        /// Delay Rx Data[1:0]
+        /// Delay Rx Data\[1:0\]
         #[bits(0..=1, rw)]
         delay_rx_data: u2,
     }
@@ -1718,7 +1718,7 @@ pub mod parallel_port_conf_3 {
         ///
         /// This bit toggles between the bits used for receive data and those
         /// used for transmit data with one exception. If the FDD Alt Word
-        /// Order bit (0x011[D7]) of parallel port configuration 2 is set, then the effect is to
+        /// Order bit (0x011\[D7\]) of parallel port configuration 2 is set, then the effect is to
         /// swap the most significant 6 bits with the least significant 6 bits. It is not always
         /// valid to set this bit.
         #[bit(0, rw)]
@@ -2177,28 +2177,28 @@ pub mod lvds_invert_ctrl1 {
         forbid_overlaps
     )]
     pub struct Register {
-        /// Invert P0[3:2]
+        /// Invert P0\[3:2\]
         #[bit(7, rw)]
         invert_p0_3_2: bool,
-        /// Invert P0[1:0]
+        /// Invert P0\[1:0\]
         #[bit(6, rw)]
         invert_p0_1_0: bool,
-        /// Invert P1[11:10]
+        /// Invert P1\[11:10\]
         #[bit(5, rw)]
         invert_p1_11_10: bool,
-        /// Invert P1[9:8]
+        /// Invert P1\[9:8\]
         #[bit(4, rw)]
         invert_p1_9_8: bool,
-        /// Invert P1[7:6]
+        /// Invert P1\[7:6\]
         #[bit(3, rw)]
         invert_p1_7_6: bool,
-        /// Invert P1[5:4]
+        /// Invert P1\[5:4\]
         #[bit(2, rw)]
         invert_p1_5_4: bool,
-        /// Invert P1[3:2]
+        /// Invert P1\[3:2\]
         #[bit(1, rw)]
         invert_p1_3_2: bool,
-        /// Invert P1[2:0]
+        /// Invert P1\[2:0\]
         #[bit(0, rw)]
         invert_p1_2_0: bool,
     }
@@ -2225,16 +2225,16 @@ pub mod lvds_invert_ctrl2 {
         /// Invert Rx Frame
         #[bit(4, rw)]
         invert_rx_frame: bool,
-        /// Invert P0[11:10]
+        /// Invert P0\[11:10\]
         #[bit(3, rw)]
         invert_p0_11_10: bool,
-        /// Invert P0[9:8]
+        /// Invert P0\[9:8\]
         #[bit(2, rw)]
         invert_p0_9_8: bool,
-        /// Invert P0[7:6]
+        /// Invert P0\[7:6\]
         #[bit(1, rw)]
         invert_p0_7_6: bool,
-        /// Invert P0[5:4]
+        /// Invert P0\[5:4\]
         #[bit(0, rw)]
         invert_p0_5_4: bool,
     }

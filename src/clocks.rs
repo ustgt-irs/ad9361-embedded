@@ -989,8 +989,8 @@ impl BbClockPathConfigHelper {
 
     /// RF clock path calculator.
     ///
-    /// This searches [`Self::CLOCK_CHAIN_TABLE`] starting from the row `rate_governor` selects
-    /// and lets [`Self::calculate_and_validate_with_full_path`] confirm whether a given pairing
+    /// This searches `Self::CLOCK_CHAIN_TABLE` starting from the row `rate_governor` selects
+    /// and lets `Self::calculate_and_validate_with_full_path` confirm whether a given pairing
     /// actually produces a consistent ADC/DAC clock relationship. If `rate_governor` is
     /// [`RateGovernor::Nominal`] and no row from its starting point onward works, this retries
     /// once against the full table (i.e. falls back to [`RateGovernor::HighestOsr`]), matching
@@ -1073,7 +1073,7 @@ impl BbClockPathConfigHelper {
     }
 
     /// The actual clock rate the DAC is programmed to, in Hz. This is always
-    /// <= [`crate::limits::MAX_DAC_CLK`], because [`Self::calculate_and_validate_with_full_path`]
+    /// <= [`crate::limits::MAX_DAC_CLK`], because `Self::calculate_and_validate_with_full_path`
     /// rejects any candidate that would exceed it.
     #[inline]
     pub const fn dac_clock_hz(&self) -> u32 {
