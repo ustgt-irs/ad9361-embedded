@@ -26,8 +26,10 @@ use axi_ad9361::regs::{
 /// [`Ad9361Uninit::read_product_id`].
 #[bitbybit::bitfield(u8, default = 0x0, debug)]
 pub struct ProductIdReg {
+    /// Product ID.
     #[bits(3..=7, rw)]
     product_id: u5,
+    /// Silicon revision.
     #[bits(0..=2, rw)]
     rev: u3,
 }
@@ -181,8 +183,10 @@ pub struct Ad9361<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> {
 /// Error from [`Ad9361Uninit::reset`].
 #[derive(Debug, thiserror::Error)]
 pub enum ResetError<Spi, Gpio> {
+    /// SPI error.
     #[error("SPI error: {0}")]
     Spi(Spi),
+    /// GPIO error.
     #[error("GPIO error: {0}")]
     Gpio(Gpio),
 }
@@ -191,7 +195,9 @@ pub enum ResetError<Spi, Gpio> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Dac {
+    /// First auxiliary DAC.
     Dac1 = 0,
+    /// Second auxiliary DAC.
     Dac2 = 1,
 }
 
@@ -199,13 +205,21 @@ pub enum Dac {
 /// timed out.
 #[derive(Debug)]
 pub enum ModuleId {
+    /// BB PLL.
     BbPll,
+    /// TX RF PLL.
     TxPll,
+    /// RX RF PLL.
     RxPll,
+    /// TX quadrature calibration.
     TxQuad,
+    /// RF DC offset calibration.
     RfDcOffset,
+    /// RX baseband filter tuning.
     RxBbTune,
+    /// TX baseband filter tuning.
     TxBbTune,
+    /// Baseband DC offset calibration.
     BbDc,
 }
 
@@ -213,27 +227,47 @@ pub enum ModuleId {
 /// [`Ad9361`].
 #[derive(Debug, thiserror::Error)]
 pub enum InitError<Spi> {
+    /// SPI error.
     #[error("SPI error: {0}")]
     Spi(#[from] Spi),
+    /// ENSM error.
     #[error("ENSM error: {0}")]
     Ensm(#[from] EnsmError<Spi>),
+    /// The calibration of the module timed out.
     #[error("calibration timeout inside {0:?} module")]
     CalibrationTimeout(ModuleId),
+    /// The state register holds an invalid ENSM state.
     #[error("read invalid ENSM state")]
     InvalidEnsmState,
+    /// The RX FIR input clock must be equal to or twice the TX FIR output clock.
     #[error(
         "unsymetric clock configuration, RX FIR input must be equal or twice of the TX FIR output"
     )]
     UnsymetricFirClocks {
+        /// TX FIR output clock in Hz.
         tx_fir_output_hz: u32,
+        /// RX FIR input clock in Hz.
         rx_fir_input_hz: u32,
     },
+    /// No gain table index was found for the TX quadrature calibration.
     #[error("could not determine gain table index for TX Quad calibration")]
     NoGainTableIndexForTxQuadCalibrationFound,
+    /// The TX FIR has more taps than the clock ratio allows.
     #[error("{taps} TX FIR taps exceed the maximum of {max} for the clock ratio")]
-    TxFirTapsExceedClockRatio { taps: u32, max: u32 },
+    TxFirTapsExceedClockRatio {
+        /// Number of taps in the configuration.
+        taps: u32,
+        /// Maximum number of taps for the clock ratio.
+        max: u32,
+    },
+    /// The RX FIR has more taps than the clock ratio allows.
     #[error("{taps} RX FIR taps exceed the maximum of {max} for the clock ratio")]
-    RxFirTapsExceedClockRatio { taps: u32, max: u32 },
+    RxFirTapsExceedClockRatio {
+        /// Number of taps in the configuration.
+        taps: u32,
+        /// Maximum number of taps for the clock ratio.
+        max: u32,
+    },
 }
 
 /// Auxiliary DAC output values in millivolts: `.0` is [`Dac::Dac1`], `.1` is [`Dac::Dac2`].
@@ -244,7 +278,9 @@ pub struct AuxDacValuesMv(pub Option<u16>, pub Option<u16>);
 /// (distinct from `regs::EnsmState::SleepWait`, a transitional state on the way in or out of it).
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum EnsmState {
+    /// State reported by the state register.
     DeviceState(regs::EnsmState),
+    /// Fully powered down, which the state register does not report.
     Sleep,
 }
 
@@ -3937,7 +3973,8 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361Core<Spi, ResetP
     /// leaves the general-purpose RX FIR bypassed regardless of `config.rx_fir`. The AD9361's FIR
     /// coefficient RAM hasn't been loaded with real taps yet at this point in `init()`. Enabling
     /// it here would mean calibration, which runs shortly after, sees whatever garbage or
-    /// POR-default coefficients happen to be sitting in RAM. [`Ad9361Uninit::init`] re-enables it at the
+    /// POR-default coefficients happen to be sitting in RAM. [`Ad9361Uninit::init`] re-enables it
+    /// at the
     /// real target value once calibration is done, mirroring `phy->bypass_rx_fir` in the C driver
     /// (`ad9361_clear_state`/`ad9361_set_trx_clock_chain` in ad9361.c).
     async fn configure_rx_hb_clock_chain(
@@ -5405,22 +5442,30 @@ pub struct DigitalInterfaceDelay {
 #[cfg(feature = "axi-tune")]
 #[derive(Debug, thiserror::Error)]
 pub enum TuneError<Spi> {
+    /// SPI error.
     #[error("SPI error: {0}")]
     Spi(#[from] Spi),
+    /// ENSM error.
     #[error("ENSM error: {0}")]
     Ensm(#[from] EnsmError<Spi>),
+    /// No interface delay window without errors was found.
     #[error("no error-free interface delay window found")]
     NoValidWindow,
+    /// Tuning across the fixed calibration rates is not implemented yet.
     #[error("tuning across the fixed calibration rates (max_freq) is not implemented yet")]
     RateSweepUnsupported,
 }
 
+/// Error while reading or changing the ENSM state.
 #[derive(Debug, thiserror::Error)]
 pub enum EnsmError<Spi> {
+    /// SPI error.
     #[error("SPI error: {0}")]
     SpiError(#[from] Spi),
+    /// The state register holds an invalid ENSM state. The value is the raw register value.
     #[error("Invalid ENSM state: {0}")]
     InvalidEnsmState(u4),
+    /// The state transition timed out. The value is the last raw state read.
     #[error("Timeout waiting for ENSM state transition")]
     EnsmTransitionTimeout(u4),
 }
