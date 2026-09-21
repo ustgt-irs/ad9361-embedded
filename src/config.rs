@@ -410,7 +410,7 @@ impl ConfigRaw {
         if self.gain_control.common.lmt_overload_low_thresh_mv_peak
             > self.gain_control.common.lmt_overload_high_thresh_mv_peak
         {
-            return Err(ValidationError::InvalidAdcOverloadThresholds);
+            return Err(ValidationError::InvalidLmtOverloadThreshold);
         }
         if let Some(auto_config) = self.gain_control.auto()
             && auto_config.inner_thresh_low_negative_dbfs
