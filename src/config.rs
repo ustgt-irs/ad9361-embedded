@@ -224,9 +224,9 @@ pub struct ConfigRaw {
 
     /// Clock configuration.
     ///
-    /// If `clock.rx.rx_fir`/`clock.tx.tx_fir` are set to a non-bypass value, `setup()` alone is
+    /// If `clock.rx.rx_fir`/`clock.tx.tx_fir` are set to a non-bypass value, `init()` alone is
     /// not sufficient for correct operation. See the doc comments on those fields and on
-    /// [`crate::Ad9361Uninit::setup`] for why a follow-up call to load real filter taps is
+    /// [`crate::Ad9361Uninit::init`] for why a follow-up call to load real filter taps is
     /// required.
     pub clock: clocks::ClockConfig,
     /// Transceiver channel mode.
