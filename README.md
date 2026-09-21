@@ -65,17 +65,6 @@ Run the tests with all features enabled:
 cargo test --all-features
 ```
 
-# Coverage
-
-Coverage can be generated using [`llvm-cov`](https://github.com/taiki-e/cargo-llvm-cov). If you
-have not done so already, install the tool:
-
-```sh
-cargo +stable install cargo-llvm-cov --locked
-```
-
-After this, you can run `cargo llvm-cov nextest` to run all the tests and display coverage.
-
 # License
 
 Licensed under either of

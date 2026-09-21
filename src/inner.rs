@@ -26,8 +26,10 @@ use axi_ad9361::regs::{
 /// [`Ad9361Uninit::read_product_id`].
 #[bitbybit::bitfield(u8, default = 0x0, debug)]
 pub struct ProductIdReg {
+    /// Product ID.
     #[bits(3..=7, rw)]
     product_id: u5,
+    /// Silicon revision.
     #[bits(0..=2, rw)]
     rev: u3,
 }
@@ -181,8 +183,10 @@ pub struct Ad9361<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> {
 /// Error from [`Ad9361Uninit::reset`].
 #[derive(Debug, thiserror::Error)]
 pub enum ResetError<Spi, Gpio> {
+    /// SPI error.
     #[error("SPI error: {0}")]
     Spi(Spi),
+    /// GPIO error.
     #[error("GPIO error: {0}")]
     Gpio(Gpio),
 }
@@ -191,7 +195,9 @@ pub enum ResetError<Spi, Gpio> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Dac {
+    /// First auxiliary DAC.
     Dac1 = 0,
+    /// Second auxiliary DAC.
     Dac2 = 1,
 }
 
@@ -199,42 +205,69 @@ pub enum Dac {
 /// timed out.
 #[derive(Debug)]
 pub enum ModuleId {
+    /// BB PLL.
     BbPll,
+    /// TX RF PLL.
     TxPll,
+    /// RX RF PLL.
     RxPll,
+    /// TX quadrature calibration.
     TxQuad,
+    /// RF DC offset calibration.
     RfDcOffset,
+    /// RX baseband filter tuning.
     RxBbTune,
+    /// TX baseband filter tuning.
     TxBbTune,
+    /// Baseband DC offset calibration.
     BbDc,
-    RxAnalog,
 }
 
 /// Error from [`Ad9361Uninit::init`], [`Ad9361::update_rf_clocks`] and the FIR setters of
 /// [`Ad9361`].
 #[derive(Debug, thiserror::Error)]
 pub enum InitError<Spi> {
+    /// SPI error.
     #[error("SPI error: {0}")]
     Spi(#[from] Spi),
+    /// ENSM error.
     #[error("ENSM error: {0}")]
     Ensm(#[from] EnsmError<Spi>),
+    /// The calibration of the module timed out.
     #[error("calibration timeout inside {0:?} module")]
     CalibrationTimeout(ModuleId),
+    /// The state register holds an invalid ENSM state.
     #[error("read invalid ENSM state")]
     InvalidEnsmState,
+    /// The RX FIR input clock must be equal to or twice the TX FIR output clock.
     #[error(
         "unsymetric clock configuration, RX FIR input must be equal or twice of the TX FIR output"
     )]
     UnsymetricFirClocks {
+        /// TX FIR output clock in Hz.
         tx_fir_output_hz: u32,
+        /// RX FIR input clock in Hz.
         rx_fir_input_hz: u32,
     },
+    /// No gain table index was found for the TX quadrature calibration.
     #[error("could not determine gain table index for TX Quad calibration")]
     NoGainTableIndexForTxQuadCalibrationFound,
+    /// The TX FIR has more taps than the clock ratio allows.
     #[error("{taps} TX FIR taps exceed the maximum of {max} for the clock ratio")]
-    TxFirTapsExceedClockRatio { taps: u32, max: u32 },
+    TxFirTapsExceedClockRatio {
+        /// Number of taps in the configuration.
+        taps: u32,
+        /// Maximum number of taps for the clock ratio.
+        max: u32,
+    },
+    /// The RX FIR has more taps than the clock ratio allows.
     #[error("{taps} RX FIR taps exceed the maximum of {max} for the clock ratio")]
-    RxFirTapsExceedClockRatio { taps: u32, max: u32 },
+    RxFirTapsExceedClockRatio {
+        /// Number of taps in the configuration.
+        taps: u32,
+        /// Maximum number of taps for the clock ratio.
+        max: u32,
+    },
 }
 
 /// Auxiliary DAC output values in millivolts: `.0` is [`Dac::Dac1`], `.1` is [`Dac::Dac2`].
@@ -245,7 +278,9 @@ pub struct AuxDacValuesMv(pub Option<u16>, pub Option<u16>);
 /// (distinct from `regs::EnsmState::SleepWait`, a transitional state on the way in or out of it).
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum EnsmState {
+    /// State reported by the state register.
     DeviceState(regs::EnsmState),
+    /// Fully powered down, which the state register does not report.
     Sleep,
 }
 
@@ -3938,9 +3973,9 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361Core<Spi, ResetP
     /// leaves the general-purpose RX FIR bypassed regardless of `config.rx_fir`. The AD9361's FIR
     /// coefficient RAM hasn't been loaded with real taps yet at this point in `init()`. Enabling
     /// it here would mean calibration, which runs shortly after, sees whatever garbage or
-    /// POR-default coefficients happen to be sitting in RAM. [`Ad9361Uninit::init`] re-enables it at the
-    /// real target value once calibration is done, mirroring `phy->bypass_rx_fir` in the C driver
-    /// (`ad9361_clear_state`/`ad9361_set_trx_clock_chain` in ad9361.c).
+    /// POR-default coefficients happen to be sitting in RAM. [`Ad9361Uninit::init`] re-enables it
+    /// at the real target value once calibration is done, mirroring `phy->bypass_rx_fir` in the C
+    /// driver (`ad9361_clear_state`/`ad9361_set_trx_clock_chain` in ad9361.c).
     async fn configure_rx_hb_clock_chain(
         &mut self,
         config: &clocks::RxConfig,
@@ -5406,193 +5441,32 @@ pub struct DigitalInterfaceDelay {
 #[cfg(feature = "axi-tune")]
 #[derive(Debug, thiserror::Error)]
 pub enum TuneError<Spi> {
+    /// SPI error.
     #[error("SPI error: {0}")]
     Spi(#[from] Spi),
+    /// ENSM error.
     #[error("ENSM error: {0}")]
     Ensm(#[from] EnsmError<Spi>),
+    /// No interface delay window without errors was found.
     #[error("no error-free interface delay window found")]
     NoValidWindow,
+    /// Tuning across the fixed calibration rates is not implemented yet.
     #[error("tuning across the fixed calibration rates (max_freq) is not implemented yet")]
     RateSweepUnsupported,
 }
 
+/// Error while reading or changing the ENSM state.
 #[derive(Debug, thiserror::Error)]
 pub enum EnsmError<Spi> {
+    /// SPI error.
     #[error("SPI error: {0}")]
     SpiError(#[from] Spi),
+    /// The state register holds an invalid ENSM state. The value is the raw register value.
     #[error("Invalid ENSM state: {0}")]
     InvalidEnsmState(u4),
+    /// The state transition timed out. The value is the last raw state read.
     #[error("Timeout waiting for ENSM state transition")]
     EnsmTransitionTimeout(u4),
-}
-
-#[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum FirDest {
-    FirTx1 = 0x01,
-    FirTx2 = 0x02,
-    FirTx1Tx2 = 0x03,
-    FirRx1 = 0x81,
-    FirRx2 = 0x82,
-    FirRx1Rx2 = 0x83,
-    FirIsRx = 0x80,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RfGainCtrl {
-    pub ant: u32,
-    pub mode: u8,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct AuxdacControl {
-    pub dac1_default_value: u16,
-    pub dac2_default_value: u16,
-
-    pub auxdac_manual_mode_en: bool,
-
-    pub dac1_in_rx_en: bool,
-    pub dac1_in_tx_en: bool,
-    pub dac1_in_alert_en: bool,
-
-    pub dac2_in_rx_en: bool,
-    pub dac2_in_tx_en: bool,
-    pub dac2_in_alert_en: bool,
-
-    pub dac1_rx_delay_us: u8,
-    pub dac1_tx_delay_us: u8,
-    pub dac2_rx_delay_us: u8,
-    pub dac2_tx_delay_us: u8,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RssiControl {
-    pub restart_mode: config::RssiRestartMode,
-    pub rssi_unit_is_rx_samples: bool,
-    pub rssi_delay: u32,
-    pub rssi_wait: u32,
-    pub rssi_duration: u32,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RxGainInfo {
-    pub tbl_type: RxGainTableType,
-    pub starting_gain_db: i32,
-    pub max_gain_db: i32,
-    pub gain_step_db: i32,
-    pub max_idx: i32,
-    pub idx_step_offset: i32,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct PortControl {
-    pub pp_conf: [u8; 3],
-    pub rx_clk_data_delay: u8,
-    pub tx_clk_data_delay: u8,
-    pub digital_io_ctrl: u8,
-    pub lvds_bias_ctrl: u8,
-    pub lvds_invert: [u8; 2],
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct CtrlOutsControl {
-    pub index: u8,
-    pub en_mask: u8,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ElnaControl {
-    pub gain_md_b: u16,
-    pub bypass_loss_md_b: u16,
-    pub settling_delay_ns: u32,
-    pub elna_1_control_en: bool,
-    pub elna_2_control_en: bool,
-    pub elna_in_gaintable_all_index_en: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct AuxadcControl {
-    pub offset: i8,
-    pub temp_time_inteval_ms: u32,
-    pub temp_sensor_decimation: u32,
-    pub periodic_temp_measuremnt: bool,
-    pub auxadc_clock_rate: u32,
-    pub auxadc_decimation: u32,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct GpoControl {
-    pub gpo_manual_mode_enable_mask: u32,
-    pub gpo_manual_mode_en: bool,
-    pub gpo0_inactive_state_high_en: bool,
-    pub gpo1_inactive_state_high_en: bool,
-    pub gpo2_inactive_state_high_en: bool,
-    pub gpo3_inactive_state_high_en: bool,
-    pub gpo0_slave_rx_en: bool,
-    pub gpo0_slave_tx_en: bool,
-    pub gpo1_slave_rx_en: bool,
-    pub gpo1_slave_tx_en: bool,
-    pub gpo2_slave_rx_en: bool,
-    pub gpo2_slave_tx_en: bool,
-    pub gpo3_slave_rx_en: bool,
-    pub gpo3_slave_tx_en: bool,
-    pub gpo0_rx_delay_us: u8,
-    pub gpo0_tx_delay_us: u8,
-    pub gpo1_rx_delay_us: u8,
-    pub gpo1_tx_delay_us: u8,
-    pub gpo2_rx_delay_us: u8,
-    pub gpo2_tx_delay_us: u8,
-    pub gpo3_rx_delay_us: u8,
-    pub gpo3_tx_delay_us: u8,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct TxMonitorControl {
-    pub tx_mon_track_en: bool,
-    pub one_shot_mode_en: bool,
-    pub low_high_gain_threshold_md_b: u32,
-    pub low_gain_db: u8,
-    pub high_gain_db: u8,
-    pub tx_mon_delay: u16,
-    pub tx_mon_duration: u16,
-    pub tx1_mon_front_end_gain: u8,
-    pub tx2_mon_front_end_gain: u8,
-    pub tx1_mon_lo_cm: u8,
-    pub tx2_mon_lo_cm: u8,
-}
-
-#[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Ad9361Clkout {
-    ClkoutDisable,
-    BufferedXtelnDcxo,
-    AdcClkDiv2,
-    AdcClkDiv3,
-    AdcClkDiv4,
-    AdcClkDiv8,
-    AdcClkDiv16,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RfRxGain {
-    pub ant: u32,
-    pub gain_db: i32,
-    pub fgt_lmt_index: u32,
-    pub lmt_gain: u32,
-    pub lpf_gain: u32,
-    pub digital_gain: u32,
-    pub lna_index: u32,
-    pub tia_index: u32,
-    pub mixer_index: u32,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RfRssi {
-    pub ant: u32,
-    pub symbol: u32,
-    pub preamble: u32,
-    pub multiplier: i32,
-    pub duration: u8,
 }
 
 const fn div_round_u32(a: u32, b: u32) -> u32 {

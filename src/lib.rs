@@ -1,13 +1,29 @@
+//! Platform agnostic driver for the AD9361 RF transceiver with a blocking and an async API.
 #![no_std]
 #![cfg_attr(docsrs, feature(doc_cfg))]
+#![deny(missing_docs)]
 
+/// Clock tree calculation and configuration.
 pub mod clocks;
+/// Driver configuration and its validation.
 pub mod config;
+/// Reading of the control output pins.
+// The per-signal accessors and type aliases follow the control output table of the datasheet.
+#[allow(missing_docs)]
 pub mod ctrl_output;
+/// Hardware limits of the AD9361.
 pub mod limits;
+/// RF synthesizer lookup tables.
+// The tables are ported from the no-OS driver.
+#[allow(missing_docs)]
 pub mod lut;
+/// Register map with typed bitfields.
+// Names follow the datasheet, so they are not documented one by one.
+#[allow(missing_docs)]
 pub mod regs;
+/// SPI framing of the AD9361.
 pub mod spi;
+/// Types shared by the driver API.
 pub mod types;
 
 pub use spi::MODE as SPI_MODE;
