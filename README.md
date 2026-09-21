@@ -20,7 +20,8 @@ The driver only depends on abstractions:
   the `blocking` and `asynch` modules. The crate root re-exports the blocking API.
 - The only source of time is `DelayNs`. The driver needs no timer, no executor and no operating
   system, and it does not depend on `std`. Calibration timeouts are implemented by polling with
-  delays.
+  delays. The `asynch` module expects an async [`DelayNs`](https://docs.rs/embedded-hal-async/latest/embedded_hal_async/delay/trait.DelayNs.html)
+  while the blocking module expects a [blocking one](https://docs.rs/embedded-hal/latest/embedded_hal/delay/trait.DelayNs.html).
 
 The crate does not contain any `unsafe` code. The register map is described with typed bitfields
 in the `regs` module.

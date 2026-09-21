@@ -1,0 +1,64 @@
+# .gitlab-ci.yml
+
+image: rust:latest
+
+variables:
+  CARGO_HOME: ${CI_PROJECT_DIR}/.cargo
+
+.rust:
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}-${CI_JOB_NAME_SLUG}
+    paths:
+      - .cargo/registry
+      - .cargo/git
+      - target/
+
+check:
+  extends: .rust
+  script:
+    - cargo check --release
+    - cargo check --release --all-features
+
+test:
+  extends: .rust
+  script:
+    - cargo test
+    - cargo test --all-features
+
+# The MSRV is specified in Cargo.toml.
+msrv:
+  extends: .rust
+  image: rust:1.88
+  script:
+    - cargo check --release
+    - cargo check --release --all-features
+
+# The crate is `no_std`, so also check it for bare-metal targets.
+cross-check:
+  extends: .rust
+  parallel:
+    matrix:
+      - TARGET:
+          - thumbv7em-none-eabihf
+          - armv7a-none-eabihf
+  script:
+    - rustup target add $TARGET
+    - cargo check --release --target=$TARGET --no-default-features
+    - cargo check --release --target=$TARGET --all-features
+
+fmt:
+  extends: .rust
+  script:
+    - rustup component add rustfmt
+    - cargo fmt --all -- --check
+
+clippy:
+  extends: .rust
+  script:
+    - rustup component add clippy
+    - cargo clippy --all-features -- -D warnings
+
+docs:
+  extends: .rust
+  script:
+    - cargo doc --all-features --no-deps
