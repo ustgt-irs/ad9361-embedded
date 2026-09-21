@@ -31,8 +31,8 @@ fn run_blocking(config: &ad9361_embedded::config::ConfigValidated) {
         "blocking: product ID {:?}",
         ad9361.read_product_id().unwrap()
     );
-    let (_driver, _clocks) = ad9361.setup(config).expect("setup failed");
-    println!("blocking: setup complete");
+    let (_driver, _clocks) = ad9361.init(config).expect("init failed");
+    println!("blocking: init complete");
 }
 
 fn run_async(config: &ad9361_embedded::config::ConfigValidated) {
@@ -44,8 +44,8 @@ fn run_async(config: &ad9361_embedded::config::ConfigValidated) {
             "async: product ID {:?}",
             ad9361.read_product_id().await.unwrap()
         );
-        let (_driver, _clocks) = ad9361.setup(config).await.expect("setup failed");
-        println!("async: setup complete");
+        let (_driver, _clocks) = ad9361.init(config).await.expect("init failed");
+        println!("async: init complete");
     });
 }
 

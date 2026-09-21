@@ -26,8 +26,10 @@ use axi_ad9361::regs::{
 /// [`Ad9361Uninit::read_product_id`].
 #[bitbybit::bitfield(u8, default = 0x0, debug)]
 pub struct ProductIdReg {
+    /// Product ID.
     #[bits(3..=7, rw)]
     product_id: u5,
+    /// Silicon revision.
     #[bits(0..=2, rw)]
     rev: u3,
 }
@@ -89,7 +91,7 @@ struct Ad9361Config {
     external_clock_config: config::ExternalClockConfig,
     /// Number of AXI ADC/DAC channels (2 for 1R1T, 4 for 2R2T), derived once from
     /// `config.transceiver_channel_mode` at setup. Used by [`Ad9361::digital_tune`] so callers
-    /// don't have to pass it in — it can't change without re-running setup.
+    /// don't have to pass it in — it can't change without re-running `init`.
     #[cfg(feature = "axi-tune")]
     num_axi_channels: u4,
 
@@ -120,12 +122,12 @@ impl Ad9361Config {
         clock: &clocks::ClockConfig,
         tx_taps: Option<u8>,
         rx_taps: Option<u8>,
-    ) -> Result<(), SetupError<E>> {
+    ) -> Result<(), InitError<E>> {
         if let Some(taps) = tx_taps
             && let Some(max) = clock.max_tx_fir_taps(self.reference_clk_rate)
             && u32::from(taps) > max
         {
-            return Err(SetupError::TxFirTapsExceedClockRatio {
+            return Err(InitError::TxFirTapsExceedClockRatio {
                 taps: taps.into(),
                 max,
             });
@@ -134,7 +136,7 @@ impl Ad9361Config {
             && let Some(max) = clock.max_rx_fir_taps(self.reference_clk_rate)
             && u32::from(taps) > max
         {
-            return Err(SetupError::RxFirTapsExceedClockRatio {
+            return Err(InitError::RxFirTapsExceedClockRatio {
                 taps: taps.into(),
                 max,
             });
@@ -164,14 +166,14 @@ struct Ad9361State {
     ensm_pin_control: bool,
 }
 
-/// A driver instance before [`Ad9361Uninit::setup`] has run. Create one with
-/// [`Ad9361Uninit::new`], then call [`Ad9361Uninit::reset`] followed by [`Ad9361Uninit::setup`]
+/// A driver instance before [`Ad9361Uninit::init`] has run. Create one with
+/// [`Ad9361Uninit::new`], then call [`Ad9361Uninit::reset`] followed by [`Ad9361Uninit::init`]
 /// to get a usable [`Ad9361`].
 pub struct Ad9361Uninit<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs>(
     Ad9361Core<Spi, ResetPin, Delay>,
 );
 
-/// A driver instance that has completed [`Ad9361Uninit::setup`] and is ready for normal use.
+/// A driver instance that has completed [`Ad9361Uninit::init`] and is ready for normal use.
 pub struct Ad9361<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> {
     inner: Ad9361Core<Spi, ResetPin, Delay>,
     config: Ad9361Config,
@@ -181,8 +183,10 @@ pub struct Ad9361<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> {
 /// Error from [`Ad9361Uninit::reset`].
 #[derive(Debug, thiserror::Error)]
 pub enum ResetError<Spi, Gpio> {
+    /// SPI error.
     #[error("SPI error: {0}")]
     Spi(Spi),
+    /// GPIO error.
     #[error("GPIO error: {0}")]
     Gpio(Gpio),
 }
@@ -191,50 +195,79 @@ pub enum ResetError<Spi, Gpio> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Dac {
+    /// First auxiliary DAC.
     Dac1 = 0,
+    /// Second auxiliary DAC.
     Dac2 = 1,
 }
 
-/// A calibration or setup module, used in [`SetupError::CalibrationTimeout`] to say which one
+/// A calibration or setup module, used in [`InitError::CalibrationTimeout`] to say which one
 /// timed out.
 #[derive(Debug)]
 pub enum ModuleId {
+    /// BB PLL.
     BbPll,
+    /// TX RF PLL.
     TxPll,
+    /// RX RF PLL.
     RxPll,
+    /// TX quadrature calibration.
     TxQuad,
+    /// RF DC offset calibration.
     RfDcOffset,
+    /// RX baseband filter tuning.
     RxBbTune,
+    /// TX baseband filter tuning.
     TxBbTune,
+    /// Baseband DC offset calibration.
     BbDc,
-    RxAnalog,
 }
 
-/// Error from [`Ad9361Uninit::setup`], [`Ad9361::update_rf_clocks`] and the FIR setters of
+/// Error from [`Ad9361Uninit::init`], [`Ad9361::update_rf_clocks`] and the FIR setters of
 /// [`Ad9361`].
 #[derive(Debug, thiserror::Error)]
-pub enum SetupError<Spi> {
+pub enum InitError<Spi> {
+    /// SPI error.
     #[error("SPI error: {0}")]
     Spi(#[from] Spi),
+    /// ENSM error.
     #[error("ENSM error: {0}")]
     Ensm(#[from] EnsmError<Spi>),
+    /// The calibration of the module timed out.
     #[error("calibration timeout inside {0:?} module")]
     CalibrationTimeout(ModuleId),
+    /// The state register holds an invalid ENSM state.
     #[error("read invalid ENSM state")]
     InvalidEnsmState,
+    /// The RX FIR input clock must be equal to or twice the TX FIR output clock.
     #[error(
         "unsymetric clock configuration, RX FIR input must be equal or twice of the TX FIR output"
     )]
     UnsymetricFirClocks {
+        /// TX FIR output clock in Hz.
         tx_fir_output_hz: u32,
+        /// RX FIR input clock in Hz.
         rx_fir_input_hz: u32,
     },
+    /// No gain table index was found for the TX quadrature calibration.
     #[error("could not determine gain table index for TX Quad calibration")]
     NoGainTableIndexForTxQuadCalibrationFound,
+    /// The TX FIR has more taps than the clock ratio allows.
     #[error("{taps} TX FIR taps exceed the maximum of {max} for the clock ratio")]
-    TxFirTapsExceedClockRatio { taps: u32, max: u32 },
+    TxFirTapsExceedClockRatio {
+        /// Number of taps in the configuration.
+        taps: u32,
+        /// Maximum number of taps for the clock ratio.
+        max: u32,
+    },
+    /// The RX FIR has more taps than the clock ratio allows.
     #[error("{taps} RX FIR taps exceed the maximum of {max} for the clock ratio")]
-    RxFirTapsExceedClockRatio { taps: u32, max: u32 },
+    RxFirTapsExceedClockRatio {
+        /// Number of taps in the configuration.
+        taps: u32,
+        /// Maximum number of taps for the clock ratio.
+        max: u32,
+    },
 }
 
 /// Auxiliary DAC output values in millivolts: `.0` is [`Dac::Dac1`], `.1` is [`Dac::Dac2`].
@@ -245,7 +278,9 @@ pub struct AuxDacValuesMv(pub Option<u16>, pub Option<u16>);
 /// (distinct from `regs::EnsmState::SleepWait`, a transitional state on the way in or out of it).
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum EnsmState {
+    /// State reported by the state register.
     DeviceState(regs::EnsmState),
+    /// Fully powered down, which the state register does not report.
     Sleep,
 }
 
@@ -255,17 +290,17 @@ impl From<regs::EnsmState> for EnsmState {
     }
 }
 
-/// Result of [`Ad9361Uninit::setup`]: the ready-to-use driver plus the clock configuration
-/// derived during setup, or the error that stopped setup partway through.
+/// Result of [`Ad9361Uninit::init`]: the ready-to-use driver plus the clock configuration
+/// derived during init, or the error that stopped init partway through.
 // The `Spi: SpiDevice` bound isn't enforced here (a type-alias limitation), but it's still
 // needed for `Spi::Error` to resolve, and the real enforcement lives on the `impl` block below.
 #[allow(type_alias_bounds)]
-type Ad9361SetupResult<Spi: SpiDevice, ResetPin, Delay> =
-    Result<(Ad9361<Spi, ResetPin, Delay>, Clocks), SetupError<Spi::Error>>;
+type Ad9361InitResult<Spi: SpiDevice, ResetPin, Delay> =
+    Result<(Ad9361<Spi, ResetPin, Delay>, Clocks), InitError<Spi::Error>>;
 
 #[bisync]
 impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361Uninit<Spi, ResetPin, Delay> {
-    /// Creates a new, unconfigured driver. Call [`Self::reset`] and then [`Self::setup`] before
+    /// Creates a new, unconfigured driver. Call [`Self::reset`] and then [`Self::init`] before
     /// using it.
     pub fn new(spi: Spi, reset_pin: ResetPin, delay: Delay) -> Self {
         Self(Ad9361Core::new(spi, reset_pin, delay))
@@ -306,10 +341,10 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361Uninit<Spi, Rese
     ///
     /// The C driver also tunes the digital interface during its setup. That needs the AXI ADC
     /// and DAC, so run [`Ad9361::digital_tune`] after this call.
-    pub async fn setup(
+    pub async fn init(
         mut self,
         config: &config::ConfigValidated,
-    ) -> Ad9361SetupResult<Spi, ResetPin, Delay> {
+    ) -> Ad9361InitResult<Spi, ResetPin, Delay> {
         let config = &config.0;
 
         let _actual_mv_values = self.setup_auxdac(&config.aux_dac).await?;
@@ -502,7 +537,7 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361Uninit<Spi, Rese
         let tx_quad = match config.tx_quad_calib {
             Some(phase_config) => {
                 if gain_table_for_tx_quad.0.is_none() {
-                    return Err(SetupError::NoGainTableIndexForTxQuadCalibrationFound);
+                    return Err(InitError::NoGainTableIndexForTxQuadCalibrationFound);
                 }
                 Some(TxQuadCalibParams {
                     phase_config,
@@ -582,7 +617,7 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361Uninit<Spi, Rese
             current_ensm_state: if let Ok(ensm_state) = ensm_state_reg.ensm_state() {
                 ensm_state.into()
             } else {
-                return Err(SetupError::InvalidEnsmState);
+                return Err(InitError::InvalidEnsmState);
             },
             ensm_pin_control: config.ensm_enable_txnrx_control,
         };
@@ -1734,7 +1769,7 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361Uninit<Spi, Rese
         lut_type: SynthLutType,
         config: &clocks::RfPllConfig,
         clocks: &Clocks,
-    ) -> Result<(), SetupError<Spi::Error>> {
+    ) -> Result<(), InitError<Spi::Error>> {
         self.setup_rf_pll(true, lut_type, config, clocks).await
     }
 
@@ -1743,7 +1778,7 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361Uninit<Spi, Rese
         lut_type: SynthLutType,
         config: &clocks::RfPllConfig,
         clocks: &Clocks,
-    ) -> Result<(), SetupError<Spi::Error>> {
+    ) -> Result<(), InitError<Spi::Error>> {
         self.setup_rf_pll(false, lut_type, config, clocks).await
     }
 
@@ -1753,7 +1788,7 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361Uninit<Spi, Rese
         lut_type: SynthLutType,
         config: &clocks::RfPllConfig,
         clocks: &Clocks,
-    ) -> Result<(), SetupError<Spi::Error>> {
+    ) -> Result<(), InitError<Spi::Error>> {
         let (synth_ref_clk, pll_vco) = if tx {
             (
                 clocks.tx().synth_ref(),
@@ -1994,7 +2029,7 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361Uninit<Spi, Rese
                 break;
             }
             if elapsed > 20_000 {
-                return Err(SetupError::CalibrationTimeout(if tx {
+                return Err(InitError::CalibrationTimeout(if tx {
                     ModuleId::TxPll
                 } else {
                     ModuleId::RxPll
@@ -2235,7 +2270,7 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361Uninit<Spi, Rese
     }
 
     /// Run the RF DC offset calibration and wait until it self-clears.
-    async fn run_rfdc_calibration(&mut self) -> Result<(), SetupError<Spi::Error>> {
+    async fn run_rfdc_calibration(&mut self) -> Result<(), InitError<Spi::Error>> {
         self.0
             .write_register(
                 regs::Register::CalibrationCtrl,
@@ -2256,7 +2291,7 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361Uninit<Spi, Rese
                 return Ok(());
             }
             if iterations >= 20_000 {
-                return Err(SetupError::CalibrationTimeout(ModuleId::RfDcOffset));
+                return Err(InitError::CalibrationTimeout(ModuleId::RfDcOffset));
             }
             self.0.delay.delay_us(1200).await;
             iterations += 1;
@@ -2264,7 +2299,7 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361Uninit<Spi, Rese
     }
 
     /// Run the BB DC offset calibration and wait until it self-clears.
-    async fn run_bbdc_calibration(&mut self) -> Result<(), SetupError<Spi::Error>> {
+    async fn run_bbdc_calibration(&mut self) -> Result<(), InitError<Spi::Error>> {
         self.0
             .write_register(
                 regs::Register::CalibrationCtrl,
@@ -2285,7 +2320,7 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361Uninit<Spi, Rese
                 return Ok(());
             }
             if iterations >= 20_000 {
-                return Err(SetupError::CalibrationTimeout(ModuleId::BbDc));
+                return Err(InitError::CalibrationTimeout(ModuleId::BbDc));
             }
             self.0.delay.delay_us(1200).await;
             iterations += 1;
@@ -2295,7 +2330,7 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361Uninit<Spi, Rese
     /// BB DC offset calibration.
     ///
     /// Rust port of `ad9361_bb_dc_offset_calib` in the C driver.
-    async fn calibrate_bb_dc_offset(&mut self) -> Result<(), SetupError<Spi::Error>> {
+    async fn calibrate_bb_dc_offset(&mut self) -> Result<(), InitError<Spi::Error>> {
         self.0
             .write_register(
                 regs::Register::BbDcOffsetCount,
@@ -2333,7 +2368,7 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361Uninit<Spi, Rese
         &mut self,
         rx_lo: u64,
         config: &config::ConfigRaw,
-    ) -> Result<(), SetupError<Spi::Error>> {
+    ) -> Result<(), InitError<Spi::Error>> {
         self.0
             .write_register(
                 regs::Register::WaitCount,
@@ -2956,7 +2991,7 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361Core<Spi, ResetP
         &mut self,
         rx_bb_bw: u32,
         bbpll_freq: u32,
-    ) -> Result<u32, SetupError<Spi::Error>> {
+    ) -> Result<u32, InitError<Spi::Error>> {
         let rx_bb_bw = rx_bb_bw.clamp(200_000, 28_000_000);
 
         let target = 126_906u64 * (rx_bb_bw as u64 / 10_000);
@@ -3050,7 +3085,7 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361Core<Spi, ResetP
         bbpll_freq: u32,
         adc_sampl_freq_hz: u32,
         rxbbf_div: u32,
-    ) -> Result<(), SetupError<Spi::Error>> {
+    ) -> Result<(), InitError<Spi::Error>> {
         let c3_msb = self.read_register(regs::Register::RxBbfC3Msb).await?;
         let c3_lsb = self.read_register(regs::Register::RxBbfC3Lsb).await?;
         let r2346 = self.read_register(regs::Register::RxBbfR2346).await?;
@@ -3243,7 +3278,7 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361Core<Spi, ResetP
         &mut self,
         tx_bb_bw: u32,
         bbpll_freq: u32,
-    ) -> Result<u16, SetupError<Spi::Error>> {
+    ) -> Result<u16, InitError<Spi::Error>> {
         let tx_bb_bw = tx_bb_bw.clamp(625_000, 20_000_000);
 
         let target = 145_036u64 * (tx_bb_bw as u64 / 10_000);
@@ -3284,7 +3319,7 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361Core<Spi, ResetP
     }
 
     /// Run the RX BB tune calibration and wait until it self-clears.
-    async fn run_rx_bb_tune_calibration(&mut self) -> Result<(), SetupError<Spi::Error>> {
+    async fn run_rx_bb_tune_calibration(&mut self) -> Result<(), InitError<Spi::Error>> {
         self.write_register(
             regs::Register::CalibrationCtrl,
             regs::calibration_ctrl::Register::ZERO
@@ -3302,7 +3337,7 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361Core<Spi, ResetP
                 return Ok(());
             }
             if iterations >= 20_000 {
-                return Err(SetupError::CalibrationTimeout(ModuleId::RxBbTune));
+                return Err(InitError::CalibrationTimeout(ModuleId::RxBbTune));
             }
             self.delay.delay_us(1200).await;
             iterations += 1;
@@ -3310,7 +3345,7 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361Core<Spi, ResetP
     }
 
     /// Run the TX BB tune calibration and wait until it self-clears.
-    async fn run_tx_bb_tune_calibration(&mut self) -> Result<(), SetupError<Spi::Error>> {
+    async fn run_tx_bb_tune_calibration(&mut self) -> Result<(), InitError<Spi::Error>> {
         self.write_register(
             regs::Register::CalibrationCtrl,
             regs::calibration_ctrl::Register::ZERO
@@ -3328,7 +3363,7 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361Core<Spi, ResetP
                 return Ok(());
             }
             if iterations >= 20_000 {
-                return Err(SetupError::CalibrationTimeout(ModuleId::TxBbTune));
+                return Err(InitError::CalibrationTimeout(ModuleId::TxBbTune));
             }
             self.delay.delay_us(1200).await;
             iterations += 1;
@@ -3338,7 +3373,7 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361Core<Spi, ResetP
     /// RX TIA calibration.
     ///
     /// Rust port of `ad9361_rx_tia_calib` in the C driver.
-    async fn calibrate_rx_tia(&mut self, bb_bw_hz: u32) -> Result<(), SetupError<Spi::Error>> {
+    async fn calibrate_rx_tia(&mut self, bb_bw_hz: u32) -> Result<(), InitError<Spi::Error>> {
         let reg1eb = self.read_register(regs::Register::RxBbfC3Msb).await?;
         let reg1ec = self.read_register(regs::Register::RxBbfC3Lsb).await?;
         let reg1e6 = self.read_register(regs::Register::RxBbfR2346).await?;
@@ -3387,7 +3422,7 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361Core<Spi, ResetP
     async fn calibrate_tx_bb_second_analog_filter(
         &mut self,
         tx_bb_bw: u32,
-    ) -> Result<(), SetupError<Spi::Error>> {
+    ) -> Result<(), InitError<Spi::Error>> {
         let tx_bb_bw = tx_bb_bw.clamp(530_000, 20_000_000);
 
         let corner = 15_708u64 * (tx_bb_bw as u64 / 10_000);
@@ -3442,7 +3477,7 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361Core<Spi, ResetP
         rx_phase_config: RxPhaseConfig,
         gain_index_tx_quad: GainTableIndexForTxQuad,
         phase_inversion_en: bool,
-    ) -> Result<(), SetupError<Spi::Error>> {
+    ) -> Result<(), InitError<Spi::Error>> {
         // Keep this API on RF bandwidth and convert locally for equations that use BB/2.
         let real_tx_bw_hz = rf_tx_bw_hz / 2;
         let real_rx_bw_hz = rf_rx_bw_hz / 2;
@@ -3498,7 +3533,7 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361Core<Spi, ResetP
                 _ => unreachable!(),
             }
         } else {
-            return Err(SetupError::UnsymetricFirClocks {
+            return Err(InitError::UnsymetricFirClocks {
                 tx_fir_output_hz: clk_tx_fir,
                 rx_fir_input_hz: clk_rx_fir,
             });
@@ -3614,7 +3649,7 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361Core<Spi, ResetP
         rx_nco_word: u2,
         decimation: u2,
         tx_channel_config: TransceiverChannelMode,
-    ) -> Result<u5, SetupError<Spi::Error>> {
+    ) -> Result<u5, InitError<Spi::Error>> {
         // The C implementation duplicates 32 phase results into a 64-entry field so an optimal
         // window that crosses 31->0 is represented as one contiguous segment.
         let mut failed: [bool; 64] = [true; 64];
@@ -3649,7 +3684,7 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361Core<Spi, ResetP
         rx_nco_word: u2,
         decimation: u2,
         tx_channel_config: TransceiverChannelMode,
-    ) -> Result<bool, SetupError<Spi::Error>> {
+    ) -> Result<bool, InitError<Spi::Error>> {
         self.write_register(
             regs::Register::QuadCalNcoFreqPhaseOffset,
             regs::quad_cal_nco_freq_phase_offset::Register::builder()
@@ -3705,7 +3740,7 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361Core<Spi, ResetP
                 break;
             }
             if iterations >= 20_000 {
-                return Err(SetupError::CalibrationTimeout(ModuleId::TxQuad));
+                return Err(InitError::CalibrationTimeout(ModuleId::TxQuad));
             }
             self.delay.delay_us(1200).await;
             iterations += 1;
@@ -3734,7 +3769,7 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361Core<Spi, ResetP
         clocks: &clocks::Clocks,
         rx_bw_hz: u32,
         tx_bw_hz: u32,
-    ) -> Result<(), SetupError<Spi::Error>> {
+    ) -> Result<(), InitError<Spi::Error>> {
         let real_rx_bw = rx_bw_hz / 2;
         let real_tx_bw = tx_bw_hz / 2;
         let bbpll_freq = clocks.bb_pll();
@@ -3759,7 +3794,7 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361Core<Spi, ResetP
         elna: Option<&config::ExternalLnaConfig>,
         gain_control: &config::GainControl,
         aux_adc: &config::AuxAdcConfig,
-    ) -> Result<Clocks, SetupError<Spi::Error>> {
+    ) -> Result<Clocks, InitError<Spi::Error>> {
         self.configure_bb_pll_clock(&clock.bb_pll).await?;
         self.configure_adc_clock(clock.adc).await?;
         self.configure_dac_clock(clock.tx.dac_div2).await?;
@@ -3936,9 +3971,10 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361Core<Spi, ResetP
 
     /// Sets up the fixed RX half-band decimation stages (RHB1-3) at their real target values, but
     /// leaves the general-purpose RX FIR bypassed regardless of `config.rx_fir`. The AD9361's FIR
-    /// coefficient RAM hasn't been loaded with real taps yet at this point in `setup()`. Enabling
+    /// coefficient RAM hasn't been loaded with real taps yet at this point in `init()`. Enabling
     /// it here would mean calibration, which runs shortly after, sees whatever garbage or
-    /// POR-default coefficients happen to be sitting in RAM. [`Ad9361Uninit::setup`] re-enables it at the
+    /// POR-default coefficients happen to be sitting in RAM. [`Ad9361Uninit::init`] re-enables it
+    /// at the
     /// real target value once calibration is done, mirroring `phy->bypass_rx_fir` in the C driver
     /// (`ad9361_clear_state`/`ad9361_set_trx_clock_chain` in ad9361.c).
     async fn configure_rx_hb_clock_chain(
@@ -3977,7 +4013,7 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361Core<Spi, ResetP
     }
 
     /// Enables the RX/TX FIR stages at their configured target ratios (`clock.rx.rx_fir`/
-    /// `clock.tx.tx_fir`). Called at the end of [`Ad9361Uninit::setup`], after calibration.
+    /// `clock.tx.tx_fir`). Called at the end of [`Ad9361Uninit::init`], after calibration.
     /// Calibration needs the FIR bypassed, see [`Self::configure_rx_hb_clock_chain`] for why.
     ///
     /// This only flips the enable/ratio bits. It does not load any filter taps. If either target
@@ -4008,7 +4044,7 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361Core<Spi, ResetP
     async fn configure_bb_pll_clock(
         &mut self,
         config: &clocks::BbPllConfig,
-    ) -> Result<(), SetupError<Spi::Error>> {
+    ) -> Result<(), InitError<Spi::Error>> {
         const LF_DEFAULTS: [u8; 3] = [0x35, 0x5B, 0xE8];
         self.write_register(
             regs::Register::CpCurrent,
@@ -4079,7 +4115,7 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361Core<Spi, ResetP
                 break;
             }
             if elapsed > 20_000 {
-                return Err(SetupError::CalibrationTimeout(ModuleId::BbPll));
+                return Err(InitError::CalibrationTimeout(ModuleId::BbPll));
             }
             self.delay.delay_us(120).await;
             elapsed += 120;
@@ -4537,7 +4573,7 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361<Spi, ResetPin, 
     pub async fn set_tx_fir_config<'coef>(
         &mut self,
         config: &config::TxFirConfig<'coef>,
-    ) -> Result<(), SetupError<Spi::Error>> {
+    ) -> Result<(), InitError<Spi::Error>> {
         let num_taps = config.num_taps.number();
         self.config
             .check_fir_taps(&self.config.clock, Some(num_taps), None)?;
@@ -4583,7 +4619,7 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361<Spi, ResetPin, 
     pub async fn set_rx_fir_config<'coef>(
         &mut self,
         config: &config::RxFirConfig<'coef>,
-    ) -> Result<(), SetupError<Spi::Error>> {
+    ) -> Result<(), InitError<Spi::Error>> {
         let num_taps = config.num_taps.number();
         self.config
             .check_fir_taps(&self.config.clock, None, Some(num_taps))?;
@@ -4654,7 +4690,7 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361<Spi, ResetPin, 
     pub async fn update_rf_clocks(
         &mut self,
         path: &clocks::BbClockPathConfigHelper,
-    ) -> Result<Clocks, SetupError<Spi::Error>> {
+    ) -> Result<Clocks, InitError<Spi::Error>> {
         let clock = self.config.clock_for_path(path);
         self.config
             .check_fir_taps(&clock, self.config.tx_fir_taps, self.config.rx_fir_taps)?;
@@ -4875,7 +4911,7 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361<Spi, ResetPin, 
     }
 
     /// The driver's last-known ENSM (Enable State Machine) state, as tracked since
-    /// [`Ad9361Uninit::setup`] or the last call that changed it. This is a local cache, not a
+    /// [`Ad9361Uninit::init`] or the last call that changed it. This is a local cache, not a
     /// fresh register read.
     pub fn ensm_state(&self) -> EnsmState {
         self.state.current_ensm_state
@@ -5406,193 +5442,32 @@ pub struct DigitalInterfaceDelay {
 #[cfg(feature = "axi-tune")]
 #[derive(Debug, thiserror::Error)]
 pub enum TuneError<Spi> {
+    /// SPI error.
     #[error("SPI error: {0}")]
     Spi(#[from] Spi),
+    /// ENSM error.
     #[error("ENSM error: {0}")]
     Ensm(#[from] EnsmError<Spi>),
+    /// No interface delay window without errors was found.
     #[error("no error-free interface delay window found")]
     NoValidWindow,
+    /// Tuning across the fixed calibration rates is not implemented yet.
     #[error("tuning across the fixed calibration rates (max_freq) is not implemented yet")]
     RateSweepUnsupported,
 }
 
+/// Error while reading or changing the ENSM state.
 #[derive(Debug, thiserror::Error)]
 pub enum EnsmError<Spi> {
+    /// SPI error.
     #[error("SPI error: {0}")]
     SpiError(#[from] Spi),
+    /// The state register holds an invalid ENSM state. The value is the raw register value.
     #[error("Invalid ENSM state: {0}")]
     InvalidEnsmState(u4),
+    /// The state transition timed out. The value is the last raw state read.
     #[error("Timeout waiting for ENSM state transition")]
     EnsmTransitionTimeout(u4),
-}
-
-#[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum FirDest {
-    FirTx1 = 0x01,
-    FirTx2 = 0x02,
-    FirTx1Tx2 = 0x03,
-    FirRx1 = 0x81,
-    FirRx2 = 0x82,
-    FirRx1Rx2 = 0x83,
-    FirIsRx = 0x80,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RfGainCtrl {
-    pub ant: u32,
-    pub mode: u8,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct AuxdacControl {
-    pub dac1_default_value: u16,
-    pub dac2_default_value: u16,
-
-    pub auxdac_manual_mode_en: bool,
-
-    pub dac1_in_rx_en: bool,
-    pub dac1_in_tx_en: bool,
-    pub dac1_in_alert_en: bool,
-
-    pub dac2_in_rx_en: bool,
-    pub dac2_in_tx_en: bool,
-    pub dac2_in_alert_en: bool,
-
-    pub dac1_rx_delay_us: u8,
-    pub dac1_tx_delay_us: u8,
-    pub dac2_rx_delay_us: u8,
-    pub dac2_tx_delay_us: u8,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RssiControl {
-    pub restart_mode: config::RssiRestartMode,
-    pub rssi_unit_is_rx_samples: bool,
-    pub rssi_delay: u32,
-    pub rssi_wait: u32,
-    pub rssi_duration: u32,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RxGainInfo {
-    pub tbl_type: RxGainTableType,
-    pub starting_gain_db: i32,
-    pub max_gain_db: i32,
-    pub gain_step_db: i32,
-    pub max_idx: i32,
-    pub idx_step_offset: i32,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct PortControl {
-    pub pp_conf: [u8; 3],
-    pub rx_clk_data_delay: u8,
-    pub tx_clk_data_delay: u8,
-    pub digital_io_ctrl: u8,
-    pub lvds_bias_ctrl: u8,
-    pub lvds_invert: [u8; 2],
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct CtrlOutsControl {
-    pub index: u8,
-    pub en_mask: u8,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ElnaControl {
-    pub gain_md_b: u16,
-    pub bypass_loss_md_b: u16,
-    pub settling_delay_ns: u32,
-    pub elna_1_control_en: bool,
-    pub elna_2_control_en: bool,
-    pub elna_in_gaintable_all_index_en: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct AuxadcControl {
-    pub offset: i8,
-    pub temp_time_inteval_ms: u32,
-    pub temp_sensor_decimation: u32,
-    pub periodic_temp_measuremnt: bool,
-    pub auxadc_clock_rate: u32,
-    pub auxadc_decimation: u32,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct GpoControl {
-    pub gpo_manual_mode_enable_mask: u32,
-    pub gpo_manual_mode_en: bool,
-    pub gpo0_inactive_state_high_en: bool,
-    pub gpo1_inactive_state_high_en: bool,
-    pub gpo2_inactive_state_high_en: bool,
-    pub gpo3_inactive_state_high_en: bool,
-    pub gpo0_slave_rx_en: bool,
-    pub gpo0_slave_tx_en: bool,
-    pub gpo1_slave_rx_en: bool,
-    pub gpo1_slave_tx_en: bool,
-    pub gpo2_slave_rx_en: bool,
-    pub gpo2_slave_tx_en: bool,
-    pub gpo3_slave_rx_en: bool,
-    pub gpo3_slave_tx_en: bool,
-    pub gpo0_rx_delay_us: u8,
-    pub gpo0_tx_delay_us: u8,
-    pub gpo1_rx_delay_us: u8,
-    pub gpo1_tx_delay_us: u8,
-    pub gpo2_rx_delay_us: u8,
-    pub gpo2_tx_delay_us: u8,
-    pub gpo3_rx_delay_us: u8,
-    pub gpo3_tx_delay_us: u8,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct TxMonitorControl {
-    pub tx_mon_track_en: bool,
-    pub one_shot_mode_en: bool,
-    pub low_high_gain_threshold_md_b: u32,
-    pub low_gain_db: u8,
-    pub high_gain_db: u8,
-    pub tx_mon_delay: u16,
-    pub tx_mon_duration: u16,
-    pub tx1_mon_front_end_gain: u8,
-    pub tx2_mon_front_end_gain: u8,
-    pub tx1_mon_lo_cm: u8,
-    pub tx2_mon_lo_cm: u8,
-}
-
-#[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Ad9361Clkout {
-    ClkoutDisable,
-    BufferedXtelnDcxo,
-    AdcClkDiv2,
-    AdcClkDiv3,
-    AdcClkDiv4,
-    AdcClkDiv8,
-    AdcClkDiv16,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RfRxGain {
-    pub ant: u32,
-    pub gain_db: i32,
-    pub fgt_lmt_index: u32,
-    pub lmt_gain: u32,
-    pub lpf_gain: u32,
-    pub digital_gain: u32,
-    pub lna_index: u32,
-    pub tia_index: u32,
-    pub mixer_index: u32,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RfRssi {
-    pub ant: u32,
-    pub symbol: u32,
-    pub preamble: u32,
-    pub multiplier: i32,
-    pub duration: u8,
 }
 
 const fn div_round_u32(a: u32, b: u32) -> u32 {

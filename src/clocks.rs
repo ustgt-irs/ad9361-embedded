@@ -7,9 +7,12 @@ pub use crate::regs::clk_bb_pll::AdcDivisor;
 pub use crate::regs::rx_enable_filter_ctrl::{Rhb3Decimation, RxFirDecimation};
 pub use crate::regs::tx_enable_filter_ctrl::{Thb3Interpolation, TxFirInterpolation};
 
+/// Modulus of the fractional BB PLL divider.
 pub const BB_PLL_MODULUS: u32 = 2_088_960;
+/// Modulus of the fractional RF PLL divider.
 pub const RFPLL_MODULUS: u32 = 8_388_593;
 
+/// Clocks of the AD9361 clock tree.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ClockId {
     /// External reference clock which is fed into the the RX, TX and BB PLLs.
@@ -45,7 +48,7 @@ pub enum ClockId {
     TxRef,
     /// PLL frequency, ranging from 6 to 12 GHz. Derived from the TX reference clock.
     TxPll,
-    ////// The TX local oscillator frequency. This is the frequency the TX mixer
+    /// The TX local oscillator frequency. This is the frequency the TX mixer
     /// uses to upconvert the baseband signal to RF.
     /// Range: 47 MHz – 6 GHz. This can also be supplied externally.
     TxLo,
@@ -68,14 +71,21 @@ pub enum ClockId {
     /// with a processor/FPGA.
     RxSample,
 
+    /// DAC clock, derived from the ADC clock.
     Dac,
+    /// Input clock of the TX HB3 stage.
     T2,
+    /// Input clock of the TX HB2 stage.
     T1,
+    /// Input clock of the TX HB1 stage, which is the output clock of the TX FIR.
     ClkTf,
+    /// Sample clock before the TX FIR, relevant clock for writing IQ data with a processor/FPGA.
     TxSample,
 }
 
 impl ClockId {
+    /// Returns the clock this clock is derived from, or [`None`] for the external reference clock
+    /// and the external LO clocks.
     pub const fn parent(&self) -> Option<Self> {
         match self {
             ClockId::ExtRefClk => None,
@@ -106,6 +116,8 @@ impl ClockId {
     }
 }
 
+/// Returns the scaler which keeps `refin_hz` at or below `max` after scaling, with the largest
+/// possible multiplier or the smallest possible divisor.
 pub const fn calculate_best_clock_divisor_for_max_value(
     refin_hz: u32,
     max: u32,
@@ -118,14 +130,17 @@ pub const fn calculate_best_clock_divisor_for_max_value(
     }
 }
 
+/// The charge pump register value is 0.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[error("invalid charge pump value, must be between 1 and 63")]
 pub struct InvalidChargePumpError;
 
+/// Charge pump setting of the BB PLL.
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct ChargePumpConfig(u6);
 
 impl ChargePumpConfig {
+    /// Creates a new charge pump setting. The register value must not be 0.
     pub fn new(charge_pump: u6) -> Result<Self, InvalidChargePumpError> {
         if charge_pump.as_u32() == 0 {
             return Err(InvalidChargePumpError {});
@@ -152,23 +167,30 @@ impl ChargePumpConfig {
         Self(u6::new(icp_val as u8))
     }
 
+    /// Register value of the charge pump setting.
     pub const fn reg_value(&self) -> u6 {
         self.0
     }
 
+    /// Charge pump current in uA.
     pub const fn current(&self) -> u32 {
         self.0.value() as u32 * 25
     }
 }
 
+/// BB PLL configuration.
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct BbPllConfig {
+    /// Integer part of the PLL divider.
     pub integer_freq_word: u8,
+    /// Fractional part of the PLL divider in units of `1 / BBPLL_MODULUS`.
     pub fractional_freq_word: u21,
+    /// Charge pump setting.
     pub charge_pump: ChargePumpConfig,
 }
 
 impl BbPllConfig {
+    /// Calculates the configuration which generates `target_clock` from `bb_ref_clk_hz`.
     pub fn calculate(bb_ref_clk_hz: u32, target_clock: u32) -> Self {
         let n_int = (target_clock / bb_ref_clk_hz).min(u8::MAX.as_u32()) as u8;
         let n_fract = u21::new(
@@ -185,18 +207,27 @@ impl BbPllConfig {
     }
 }
 
+/// Divider between the RF PLL VCO and the LO clock.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum PllVcoDivider {
+    /// Divide by 2.
     Div2,
+    /// Divide by 4.
     Div4,
+    /// Divide by 8.
     Div8,
+    /// Divide by 16.
     Div16,
+    /// Divide by 32.
     Div32,
+    /// Divide by 64.
     Div64,
+    /// Divide by 128.
     Div128,
 }
 
 impl PllVcoDivider {
+    /// Value of the divider.
     pub const fn divider(&self) -> u32 {
         match self {
             PllVcoDivider::Div2 => 2,
@@ -209,6 +240,7 @@ impl PllVcoDivider {
         }
     }
 
+    /// Register bits of the divider.
     pub const fn as_reg_bits(&self) -> regs::PllVcoDividerBits {
         match self {
             PllVcoDivider::Div2 => regs::PllVcoDividerBits::Div2,
@@ -222,13 +254,18 @@ impl PllVcoDivider {
     }
 }
 
+/// RF PLL configuration.
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct RfPllConfig {
+    /// Divider between the VCO and the LO clock.
     pub vco_div: PllVcoDivider,
+    /// Integer part of the PLL divider.
     pub pll_int: u11,
+    /// Fractional part of the PLL divider in units of `1 / RFPLL_MODULUS`.
     pub pll_frac: u23,
 }
 
+/// Configuration of an LO clock, which is either generated internally or supplied externally.
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum LocalOscClockConfig {
     /// External VCO.
@@ -240,23 +277,29 @@ pub enum LocalOscClockConfig {
     Internal(RfPllConfig),
 }
 
+/// Error while calculating an RF PLL configuration.
 #[derive(Debug, thiserror::Error)]
 pub enum RfPllFreqError {
+    /// The reference clock is out of range.
     #[error(
         "invalid reference clock, min {min}, max {max}",
         min = super::limits::MIN_SYNTH_FREF,
         max = super::limits::MAX_SYNTH_FREF
     )]
     InvalidRefClock,
+    /// The VCO clock is out of range.
     #[error("invalid VCO clock, must be between 6 and 12 GHz")]
     InvalidVcoClock,
+    /// There is no valid VCO clock for the LO clock.
     #[error("invalid LO clock, can not determine valid VCO clock for it")]
     InvalidLoClock,
+    /// The VCO divider is not valid for an internal LO.
     #[error("invalid PLL VCO divider, must be divider for internal LO")]
     InvalidPllVcoDivider,
 }
 
 impl LocalOscClockConfig {
+    /// Creates the configuration for an externally supplied VCO clock.
     pub const fn new_for_external_lo(external_vco_freq: u64) -> Self {
         Self::External { external_vco_freq }
     }
@@ -292,6 +335,8 @@ impl LocalOscClockConfig {
         }))
     }
 
+    /// Calculates the LO configuration for a target LO clock. Uses the smallest VCO divider which
+    /// brings the VCO clock into its valid range.
     pub fn calculate_for_internal_lo(
         synth_clk: u32,
         target_lo_clock: u64,
@@ -324,6 +369,7 @@ impl LocalOscClockConfig {
         )
     }
 
+    /// Register bits of the VCO divider. An external LO has its own value.
     #[inline]
     pub fn vco_div_reg_value(&self) -> regs::PllVcoDividerBits {
         match self {
@@ -335,6 +381,7 @@ impl LocalOscClockConfig {
     }
 }
 
+/// Frequencies of all clocks in Hz, calculated from a [`ClockConfig`].
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Clocks {
     ext_clk: u32,
@@ -372,17 +419,20 @@ impl Clocks {
         self.adc
     }
 
+    /// RX clocks.
     #[inline]
     pub const fn rx(&self) -> &RxClocks {
         &self.rx
     }
 
+    /// TX clocks.
     #[inline]
     pub const fn tx(&self) -> &TxClocks {
         &self.tx
     }
 }
 
+/// Frequencies of the RX clocks in Hz.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct RxClocks {
     synth_ref: u32,
@@ -401,11 +451,13 @@ impl RxClocks {
         self.synth_ref
     }
 
+    /// Frequency of the RX PLL VCO, or [`None`] if the LO is supplied externally.
     #[inline]
     pub const fn pll_vco(&self) -> Option<u64> {
         self.pll_vco
     }
 
+    /// Frequency of the RX LO.
     #[inline]
     pub const fn lo(&self) -> u64 {
         self.lo
@@ -443,6 +495,7 @@ impl RxClocks {
     }
 }
 
+/// Frequencies of the TX clocks in Hz.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct TxClocks {
     synth_ref: u32,
@@ -462,11 +515,13 @@ impl TxClocks {
         self.synth_ref
     }
 
+    /// Frequency of the TX PLL VCO, or [`None`] if the LO is supplied externally.
     #[inline]
     pub const fn pll_vco(&self) -> Option<u64> {
         self.pll_vco
     }
 
+    /// Frequency of the TX LO.
     #[inline]
     pub const fn lo(&self) -> u64 {
         self.lo
@@ -590,8 +645,10 @@ impl Clocks {
     }
 }
 
+/// Scalers which derive the PLL reference clocks from the external reference clock.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct RefClockScalers {
+    /// Scaler for the BB PLL reference clock.
     pub bb_refclk: regs::clock_ctrl::ClockScaler,
     /// You can use [calculate_best_clock_divisor_for_max_value] to calculate the best divisor
     /// for a target reference clock.
@@ -602,28 +659,36 @@ pub struct RefClockScalers {
 }
 
 impl RefClockScalers {
+    /// Calculates the RX synth reference clock from the external reference clock `refin_hz`.
     pub fn calculate_rx_synth_clock(&self, refin_hz: u32) -> u32 {
         refin_hz * self.rx_synth.mult() / self.rx_synth.div()
     }
 
+    /// Calculates the TX synth reference clock from the external reference clock `refin_hz`.
     pub fn calculate_tx_synth_clock(&self, refin_hz: u32) -> u32 {
         refin_hz * self.tx_synth.mult() / self.tx_synth.div()
     }
 
+    /// Calculates the BB PLL reference clock from the external reference clock `refin_hz`.
     pub fn calculate_bb_pll_synth_clock(&self, refin_hz: u32) -> u32 {
         refin_hz * self.bb_refclk.mult() / self.bb_refclk.div()
     }
 }
 
+/// Error for target PLL reference clocks which are out of range.
 pub enum RefClockRangeError {
     /// The target reference clock is too high to be derived from the external reference clock.
     TooHigh {
+        /// Requested reference clock in Hz.
         target_refclk: u32,
+        /// Highest possible reference clock in Hz.
         max_possible_refclk: u32,
     },
     /// The target reference clock is too low to be derived from the external reference clock.
     TooLow {
+        /// Requested reference clock in Hz.
         target_refclk: u32,
+        /// Lowest possible reference clock in Hz.
         min_possible_refclk: u32,
     },
 }
@@ -665,52 +730,74 @@ impl RefClockScalers {
     }
 }
 
+/// Clock tree configuration.
 #[derive(Debug, Clone)]
 pub struct ClockConfig {
+    /// Scalers of the PLL reference clocks.
     pub ref_clk_scalers: RefClockScalers,
+    /// BB PLL configuration.
     pub bb_pll: BbPllConfig,
+    /// Divisor from the BB PLL clock to the ADC clock.
     pub adc: AdcDivisor,
 
+    /// RX path configuration.
     pub rx: RxConfig,
+    /// TX path configuration.
     pub tx: TxConfig,
 }
 
+/// Error while calculating a clock path configuration.
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum RfClockPathCalculationError {
+    /// The TX sample rate exceeds the maximum baseband rate.
     #[error(
         "specified TX sample rate faster than maximum baseband rate {}",
         crate::limits::MAX_BASEBAND_RATE
     )]
     TxSampleRateTooFast,
+    /// The target frequencies can not be reached with the path configuration.
     #[error("can not achieve target frequencies with specified path configuration")]
     InvalidPathConfig,
+    /// There is no valid configuration for the TX and RX sample rates.
     #[error("could not find valid configuration for specified TX/RX sample frequencies")]
     CouldNotFindValidConfig,
+    /// The BB PLL clock derived from the sample clocks is too slow.
     #[error("sample clocks too slow, determined BB PLL clock is too slow")]
     ClocksTooSlow,
+    /// The BB PLL clock derived from the sample clocks is too fast.
     #[error("sample clocks too fast, determined BB PLL clock is too fast")]
     ClocksTooFast,
+    /// The ADC clock is too fast.
     #[error("invalid ADC clock, too fast")]
     AdcClockTooFast,
+    /// The ADC clock is too slow.
     #[error("invalid ADC clock, too slow")]
     AdcClockTooSlow,
+    /// The DAC clock is too fast.
     #[error("invalid DAC clock, too fast")]
     DacClockTooFast,
+    /// The RX sample rate exceeds the maximum baseband rate.
     #[error(
         "specified RX sample rate faster than maximum baseband rate {}",
         crate::limits::MAX_BASEBAND_RATE
     )]
     RxSampleRateTooFast,
+    /// The clock of the RX HB1 stage (CLKRF) is too fast.
     #[error("RX HB1 stage (CLKRF) clock exceeds {}", crate::limits::MAX_RX_HB1)]
     RxHb1ClockTooFast,
+    /// The clock of the RX HB2 stage (R1) is too fast.
     #[error("RX HB2 stage (R1) clock exceeds {}", crate::limits::MAX_RX_HB2)]
     RxHb2ClockTooFast,
+    /// The clock of the RX HB3 stage (R2) is too fast.
     #[error("RX HB3 stage (R2) clock exceeds {}", crate::limits::MAX_RX_HB3)]
     RxHb3ClockTooFast,
+    /// The clock of the TX HB1 stage (CLKTF) is too fast.
     #[error("TX HB1 stage (CLKTF) clock exceeds {}", crate::limits::MAX_TX_HB1)]
     TxHb1ClockTooFast,
+    /// The clock of the TX HB2 stage (T1) is too fast.
     #[error("TX HB2 stage (T1) clock exceeds {}", crate::limits::MAX_TX_HB2)]
     TxHb2ClockTooFast,
+    /// The clock of the TX HB3 stage (T2) is too fast.
     #[error("TX HB3 stage (T2) clock exceeds {}", crate::limits::MAX_TX_HB3)]
     TxHb3ClockTooFast,
 }
@@ -1057,16 +1144,19 @@ impl BbClockPathConfigHelper {
         Err(RfClockPathCalculationError::CouldNotFindValidConfig)
     }
 
+    /// BB PLL clock in Hz.
     #[inline]
     pub const fn bb_pll_clock_hz(&self) -> u32 {
         self.bb_pll_clock_hz
     }
 
+    /// Divisor from the BB PLL clock to the ADC clock.
     #[inline]
     pub const fn adc_div(&self) -> AdcDivisor {
         self.adc_div
     }
 
+    /// Whether the DAC clock is half of the ADC clock.
     #[inline]
     pub const fn dac_div2(&self) -> bool {
         self.dac_div2
@@ -1085,41 +1175,49 @@ impl BbClockPathConfigHelper {
         }
     }
 
+    /// RX HB3 decimation.
     #[inline]
     pub const fn rhb3(&self) -> Rhb3Decimation {
         self.rhb3
     }
 
+    /// Whether the RX HB2 stage is enabled.
     #[inline]
     pub const fn rhb2(&self) -> bool {
         self.rhb2
     }
 
+    /// Whether the RX HB1 stage is enabled.
     #[inline]
     pub const fn rhb1(&self) -> bool {
         self.rhb1
     }
 
+    /// RX FIR decimation.
     #[inline]
     pub const fn rx_fir(&self) -> RxFirDecimation {
         self.rx_fir
     }
 
+    /// TX HB3 interpolation.
     #[inline]
     pub const fn thb3(&self) -> Thb3Interpolation {
         self.thb3
     }
 
+    /// Whether the TX HB2 stage is enabled.
     #[inline]
     pub const fn thb2(&self) -> bool {
         self.thb2
     }
 
+    /// Whether the TX HB1 stage is enabled.
     #[inline]
     pub const fn thb1(&self) -> bool {
         self.thb1
     }
 
+    /// TX FIR interpolation.
     #[inline]
     pub const fn tx_fir(&self) -> TxFirInterpolation {
         self.tx_fir
@@ -1152,6 +1250,8 @@ impl BbClockPathConfigHelper {
 }
 
 impl ClockConfig {
+    /// Calculates and validates the BB PLL and ADC clocks for a fully specified half-band and FIR
+    /// path.
     #[allow(clippy::too_many_arguments)]
     pub const fn calculate_and_validate_rf_pll_from_sample_clock(
         tx_sample_hz: u32,
@@ -1211,16 +1311,21 @@ impl ClockConfig {
     }
 }
 
+/// RX clock path configuration.
 #[derive(Debug, Clone)]
 pub struct RxConfig {
+    /// RX LO configuration.
     pub lo: LocalOscClockConfig,
 
+    /// RX HB3 decimation.
     pub rhb3: Rhb3Decimation,
+    /// Enables the RX HB2 stage.
     pub rhb2: bool,
+    /// Enables the RX HB1 stage.
     pub rhb1: bool,
     /// If this is anything other than [`RxFirDecimation::Div1BypassFilter`], real filter taps
     /// must be loaded via [`crate::Ad9361::set_rx_fir_config`] for correct operation. The RX FIR
-    /// is kept bypassed through [`crate::Ad9361Uninit::setup`] and calibration, and only enabled
+    /// is kept bypassed through [`crate::Ad9361Uninit::init`] and calibration, and only enabled
     /// at this target afterward.
     /// At that point it runs with whatever coefficients happen to already be in the FIR's
     /// coefficient RAM. If no taps have ever been loaded (for example right after a fresh
@@ -1229,17 +1334,23 @@ pub struct RxConfig {
     pub rx_fir: RxFirDecimation,
 }
 
+/// TX clock path configuration.
 #[derive(Debug, Clone)]
 pub struct TxConfig {
+    /// TX LO configuration.
     pub lo: LocalOscClockConfig,
 
+    /// Halves the DAC clock relative to the ADC clock.
     pub dac_div2: bool,
+    /// TX HB3 interpolation.
     pub thb3: Thb3Interpolation,
+    /// Enables the TX HB2 stage.
     pub thb2: bool,
+    /// Enables the TX HB1 stage.
     pub thb1: bool,
     /// If this is anything other than [`TxFirInterpolation::Mult1BypassFilter`], real filter taps
     /// must be loaded via [`crate::Ad9361::set_tx_fir_config`] for correct operation. The TX FIR
-    /// is kept bypassed through [`crate::Ad9361Uninit::setup`] and calibration, and only enabled
+    /// is kept bypassed through [`crate::Ad9361Uninit::init`] and calibration, and only enabled
     /// at this target afterward. At that point it runs with
     /// whatever coefficients happen to already be in the FIR's coefficient RAM. If no taps have
     /// ever been loaded (for example right after a fresh power-on reset), that RAM is typically
