@@ -3,7 +3,6 @@ name = "ad9361-embedded"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.88"
-authors = ["Robin Mueller <muellerr@irs.uni-stuttgart.de>"]
 description = "Platform agnostic AD9361 RF transceiver driver with blocking and async embedded-hal support"
 license = "(MIT OR Apache-2.0) AND BSD-3-Clause"
 repository = "https://github.com/ustgt-irs/ad9361-embedded"

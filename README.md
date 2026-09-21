@@ -2,13 +2,13 @@
 [![docs.rs](https://img.shields.io/docsrs/ad9361-embedded)](https://docs.rs/ad9361-embedded)
 [![ci](https://github.com/ustgt-irs/ad9361-embedded/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ustgt-irs/ad9361-embedded/actions/workflows/ci.yml)
 
-Pure-Rust AD9361 driver
-======================
+AD9361 RF-transceiver driver
+==============
 
 `ad9361-embedded` is a `no_std` Rust driver for the
 [Analog Devices AD9361](https://www.analog.com/en/products/ad9361.html) RF agile transceiver.
 
-The driver only depends on abstractions:
+The driver is portable by using the following abstractions:
 
 - The SPI bus, the reset pin and all timing are provided through the
   [`embedded-hal`](https://crates.io/crates/embedded-hal) traits `SpiDevice`, `OutputPin` and
