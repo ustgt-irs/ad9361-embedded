@@ -1220,7 +1220,7 @@ pub struct RxConfig {
     pub rhb1: bool,
     /// If this is anything other than [`RxFirDecimation::Div1BypassFilter`], real filter taps
     /// must be loaded via [`crate::Ad9361::set_rx_fir_config`] for correct operation. The RX FIR
-    /// is kept bypassed through [`crate::Ad9361Uninit::setup`] and calibration, and only enabled
+    /// is kept bypassed through [`crate::Ad9361Uninit::init`] and calibration, and only enabled
     /// at this target afterward.
     /// At that point it runs with whatever coefficients happen to already be in the FIR's
     /// coefficient RAM. If no taps have ever been loaded (for example right after a fresh
@@ -1239,7 +1239,7 @@ pub struct TxConfig {
     pub thb1: bool,
     /// If this is anything other than [`TxFirInterpolation::Mult1BypassFilter`], real filter taps
     /// must be loaded via [`crate::Ad9361::set_tx_fir_config`] for correct operation. The TX FIR
-    /// is kept bypassed through [`crate::Ad9361Uninit::setup`] and calibration, and only enabled
+    /// is kept bypassed through [`crate::Ad9361Uninit::init`] and calibration, and only enabled
     /// at this target afterward. At that point it runs with
     /// whatever coefficients happen to already be in the FIR's coefficient RAM. If no taps have
     /// ever been loaded (for example right after a fresh power-on reset), that RAM is typically
