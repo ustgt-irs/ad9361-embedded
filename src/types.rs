@@ -19,45 +19,69 @@ pub enum RxPhaseConfig {
 /// Identifies one of the two RX channels.
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum ReceiverId {
+    /// RX channel 1.
     Rx1,
+    /// RX channel 2.
     Rx2,
 }
 /// Identifies one of the two TX channels.
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum TransmitterId {
+    /// TX channel 1.
     Tx1,
+    /// TX channel 2.
     Tx2,
 }
+/// Gain control mode of an RX channel.
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum GainControlMode {
+    /// The gain is set by software.
     Manual,
+    /// Automatic gain control in fast attack mode.
     AutoFastAttack,
+    /// Automatic gain control in slow attack mode.
     AutoSlowAttack,
+    /// Automatic gain control in hybrid mode.
     AutoHybrid,
 }
+/// Gain index the fast AGC goes to on an event, like leaving the RX state or the EN_AGC pin
+/// going high.
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FastAgcTargetGainIndexType {
+    /// Go to the maximum gain index.
     MaxGain,
+    /// Go to the set gain index.
     SetGain,
+    /// Go to the optimized gain index.
     OptimizedGain,
+    /// Keep the current gain index.
     NoGainChange,
 }
+/// Clocks of the RX chain, from the BB PLL down to the sample rate.
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RxClock {
+    /// BB PLL clock.
     BbPll,
+    /// ADC clock.
     Adc,
+    /// Output of the RX HB3 stage.
     R2,
+    /// Output of the RX HB2 stage.
     R1,
+    /// Output of the RX HB1 stage.
     ClkRf,
+    /// RX sample rate.
     RxSample,
 }
 
 impl RxClock {
+    /// Number of clocks in the RX chain.
     pub const NUM_CLOCKS: usize = 6;
 
+    /// Maximum frequency of the clock in Hz.
     #[inline]
     pub const fn limit_hz(&self) -> u32 {
         match self {
@@ -70,20 +94,29 @@ impl RxClock {
         }
     }
 }
+/// Clocks of the TX chain, from the DAC clock down to the sample rate.
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TxClock {
+    /// Slot of the BB PLL, which the TX chain does not use. Keeps the order of [`RxClock`].
     Ignore,
+    /// DAC clock.
     Dac,
+    /// Input of the TX HB3 stage.
     T2,
+    /// Input of the TX HB2 stage.
     T1,
+    /// Input of the TX HB1 stage.
     ClkTf,
+    /// TX sample rate.
     TxSample,
 }
 
 impl TxClock {
+    /// Number of clocks in the TX chain.
     pub const NUM_CLOCKS: usize = 6;
 
+    /// Maximum frequency of the clock in Hz.
     #[inline]
     pub const fn limit_hz(&self) -> u32 {
         match self {
