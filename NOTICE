@@ -1,0 +1,7 @@
+Platform agnostic driver for the AD9361 RF transceiver.
+
+This software contains code developed at the University of Stuttgart's Institute of Space Systems.
+
+Parts of this software are derived from the AD9361 driver of the no-OS library of Analog Devices,
+Inc. (https://github.com/analogdevicesinc/no-OS). The copyright notice and the license terms of
+these parts are reproduced in the LICENSE-ADI file.

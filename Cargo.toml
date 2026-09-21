@@ -1,27 +1,28 @@
 [package]
-name = "ad9361"
+name = "ad9361-embedded"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.88"
+authors = ["Robin Mueller <muellerr@irs.uni-stuttgart.de>"]
+description = "Platform agnostic AD9361 RF transceiver driver with blocking and async embedded-hal support"
+license = "(MIT OR Apache-2.0) AND BSD-3-Clause"
+keywords = ["ad9361", "sdr", "transceiver", "embedded-hal", "no-std"]
+categories = ["embedded", "no-std", "hardware-support"]
 
 [dependencies]
 arbitrary-int = "2"
 bitbybit = "2"
 embedded-hal-async = "1"
-embedded-hal-bus = { version = "0.3", features = ["async"] }
-embassy-sync = "0.8"
 embedded-hal = "1"
-log = "0.4"
-libm = "0.2"
 num = { version = "0.4", default-features = false }
 heapless = { version = "0.9" }
 thiserror = { version = "2", default-features = false }
 defmt = { version = "1", optional = true }
 strum = { version = "0.28", default-features = false, features = ["derive"] }
 bisync2 = "0.3"
-axi-ad9361 = { path = "../../firmware/hdl-drivers-rs/axi-ad9361", optional = true }
+axi-ad9361 = { version = "0.1", optional = true }
 
 [features]
-# TODO: Remove
 default = ["axi-tune"]
 axi-tune = ["dep:axi-ad9361"]
 defmt = ["dep:defmt", "arbitrary-int/defmt"]

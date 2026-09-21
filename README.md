@@ -1,93 +1,97 @@
-# ad9361-embedded
+[![Crates.io](https://img.shields.io/crates/v/ad9361-embedded)](https://crates.io/crates/ad9361-embedded)
+[![docs.rs](https://img.shields.io/docsrs/ad9361-embedded)](https://docs.rs/ad9361-embedded)
 
+ad9361-embedded - Platform agnostic AD9361 driver
+======================
 
+`ad9361-embedded` is a `no_std` Rust driver for the
+[Analog Devices AD9361](https://www.analog.com/en/products/ad9361.html) RF agile transceiver. It
+is a Rust port of the AD9361 driver of the Analog Devices
+[no-OS](https://github.com/analogdevicesinc/no-OS) library.
 
-## Getting started
+The driver only depends on abstractions:
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+- The SPI bus, the reset pin and all timing are provided through the
+  [`embedded-hal`](https://crates.io/crates/embedded-hal) traits `SpiDevice`, `OutputPin` and
+  `DelayNs`.
+- The same source code provides a **blocking** API based on `embedded-hal` and an **async** API
+  based on [`embedded-hal-async`](https://crates.io/crates/embedded-hal-async). Both are generated
+  from a single implementation using [`bisync2`](https://crates.io/crates/bisync2). They live in
+  the `blocking` and `asynch` modules. The crate root re-exports the blocking API.
+- The only source of time is `DelayNs`. The driver needs no timer, no executor and no operating
+  system, and it does not depend on `std`. Calibration timeouts are implemented by polling with
+  delays.
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+The crate does not contain any `unsafe` code. The register map is described with typed bitfields
+in the `regs` module.
 
-## Add your files
+# Features
 
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+`ad9361-embedded` currently supports the following features:
 
+- Device bring-up: reset, clock chain (BB PLL, ADC and DAC clocks, half-band and FIR stages), RX
+  and TX RF PLLs, and the calibrations (BB and RF DC offset, BB analog filters, TIA, RX ADC and TX
+  quadrature).
+- Calculation and validation of the clock configuration for a target sample rate, and updating
+  the clock configuration and sample rate at run-time with `Ad9361::update_rf_clocks`.
+- Gain control: manual, slow attack, fast attack and hybrid AGC together with the RX gain tables.
+- Loading of the TX and RX FIR filter coefficients.
+- Digital interface configuration for LVDS and CMOS.
+- RSSI, AUXADC, AUXDAC, GPO, control output pins, external LNA control and the TX monitor.
+- Enable state machine (ENSM) control and TX muting.
+
+The following features have not been implemented yet. PRs or notifications for demand are welcome!
+
+- Fast lock profiles
+- Changing the LO frequencies at run-time
+
+## Default features
+
+- `axi-tune`: Enables the tuning of the digital interface delays (`Ad9361::digital_tune`). This
+  requires access to the AXI ADC and DAC of the Analog Devices HDL core, which is provided by the
+  [`axi-ad9361`](https://crates.io/crates/axi-ad9361) crate.
+
+## Optional features
+
+- [`defmt`](https://defmt.ferrous-systems.com/): Adds the
+  [`defmt::Format`](https://defmt.ferrous-systems.com/format) derive on the register and
+  configuration types.
+
+# Tests
+
+Run the tests with all features enabled:
+
+```sh
+cargo test --all-features
 ```
-cd existing_repo
-git remote add origin https://git.irs.uni-stuttgart.de/irs/ad9361-embedded.git
-git branch -M main
-git push -uf origin main
+
+# Coverage
+
+Coverage can be generated using [`llvm-cov`](https://github.com/taiki-e/cargo-llvm-cov). If you
+have not done so already, install the tool:
+
+```sh
+cargo +stable install cargo-llvm-cov --locked
 ```
 
-## Integrate with your tools
+After this, you can run `cargo llvm-cov nextest` to run all the tests and display coverage.
 
-* [Set up project integrations](https://git.irs.uni-stuttgart.de/irs/ad9361-embedded/-/settings/integrations)
+# License
 
-## Collaborate with your team
+Licensed under either of
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or
+  <http://www.apache.org/licenses/LICENSE-2.0>)
+- MIT license ([LICENSE-MIT](LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
 
-## Test and Deploy
+at your option.
 
-Use the built-in continuous integration in GitLab.
+Parts of this crate are derived from the AD9361 driver of the Analog Devices no-OS library, which
+is licensed under the 3-clause BSD license. The copyright notice and the license terms of these
+parts are kept in [LICENSE-ADI](LICENSE-ADI) and [NOTICE](NOTICE).
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
+## Contribution
 
-***
-
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in
+the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any
+additional terms or conditions.

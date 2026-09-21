@@ -3,7 +3,7 @@
 version = 4
 
 [[package]]
-name = "ad9361"
+name = "ad9361-embedded"
 version = "0.1.0"
 dependencies = [
  "arbitrary-int",
