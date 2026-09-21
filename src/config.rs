@@ -390,7 +390,7 @@ impl ConfigRaw {
             if manual_config.dec_gain_step == 0 || manual_config.dec_gain_step > 8 {
                 return Err(ValidationError::InvalidStepSize(
                     StepSizeKind::ManualGainDec,
-                    manual_config.inc_gain_step,
+                    manual_config.dec_gain_step,
                 ));
             }
         }
