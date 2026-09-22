@@ -4925,6 +4925,13 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361<Spi, ResetPin, 
         self.state.current_ensm_state
     }
 
+    /// The current clock tree configuration, as last applied by [`Ad9361Uninit::init`] or
+    /// [`Ad9361::update_rf_clocks`]. This is a local cache reflecting what was actually written
+    /// to the chip, not something callers should recompute themselves.
+    pub fn clock_config(&self) -> &clocks::ClockConfig {
+        &self.config.clock
+    }
+
     /// Tunes the RX and TX digital interface delay, which are the `RX_CLOCK_DATA_DELAY`/
     /// `TX_CLOCK_DATA_DELAY` parameters, at the currently configured sample rate, returning the
     /// values that ended up applied.
