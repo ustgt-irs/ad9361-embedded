@@ -1551,8 +1551,16 @@ pub mod start_temp_reading {
         forbid_overlaps
     )]
     pub struct Register {
+        /// Toggles when a new manual-mode temperature reading (Register 0x00E) becomes valid.
+        /// Read-only status bit, per UG-570's Internal Temperature Sensor section.
+        #[bit(1, r)]
+        pub temp_sensor_valid: bool,
+        /// Set to start a new manual-mode temperature reading. Not self-clearing: to start
+        /// another reading, this must be cleared and then set again, even if it was already set
+        /// from a previous reading. Only applies when periodic measurement
+        /// (`temp_sense2::Register::temp_sense_periodic_enable`) is disabled.
         #[bit(0, rw)]
-        pub clear_to_start_temp_reading: bool,
+        pub start_temp_reading: bool,
     }
 }
 

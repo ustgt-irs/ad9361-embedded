@@ -4391,6 +4391,18 @@ impl FirRegisterSet {
     const FILTER_CONF_WRITE: u8 = 1 << 2;
 }
 
+/// Error from [`Ad9361::read_temperature_millicelsius`].
+#[derive(Debug, thiserror::Error)]
+pub enum TemperatureReadError<Spi> {
+    /// SPI error.
+    #[error("SPI error: {0}")]
+    Spi(#[from] Spi),
+    /// Manual mode only: the temperature sensor valid signal (Register 0x00C, Bit D1) did not
+    /// toggle within the timeout.
+    #[error("temperature sensor valid signal did not toggle within the timeout")]
+    Timeout,
+}
+
 #[bisync]
 impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361<Spi, ResetPin, Delay> {
     /// Reads the product ID and silicon revision registers.
@@ -4418,6 +4430,84 @@ impl<Spi: SpiDevice, ResetPin: OutputPin, Delay: DelayNs> Ad9361<Spi, ResetPin, 
     /// Reads a single register.
     pub async fn read_register(&self, reg: regs::Register) -> Result<u8, Spi::Error> {
         self.inner.read_register(reg).await
+    }
+
+    /// Reads the AD9361 die temperature, in millidegrees Celsius.
+    ///
+    /// Adapts to whichever mode [`crate::config::TempSenseConfig::enable_periodic`] is currently
+    /// configured with, by checking Register 0x00D Bit D0 directly rather than assuming a mode:
+    ///
+    /// - Periodic mode: the chip keeps the temperature register refreshed on its own schedule, so
+    ///   this is a plain read, matching the ADI reference driver's `ad9361_get_temp`.
+    /// - Manual mode: per UG-570's Register 0x00C bit reference, Bit D0 ("Start Temp Reading") is
+    ///   edge-triggered and not self-clearing, so a new reading requires clearing it and setting
+    ///   it again even if it was already set. This then polls Bit D1, which toggles once the new
+    ///   reading is valid, until it differs from its pre-trigger state, with a timeout.
+    ///
+    /// Either way, the AuxADC is powered down while reading the raw temperature register and
+    /// restored afterward (UG-570's register reference for 0x00E: "disable the AuxADC ... to
+    /// ensure a valid temperature reading"), and the raw code is converted with the same
+    /// `raw * 1_000_000 / 1140` scaling ADI's reference driver uses (rounded to the nearest
+    /// integer).
+    pub async fn read_temperature_millicelsius(
+        &mut self,
+    ) -> Result<i32, TemperatureReadError<Spi::Error>> {
+        const POLL_INTERVAL_US: u32 = 200;
+        const POLL_TIMEOUT_US: u32 = 50_000;
+
+        let periodic_enabled = regs::temp_sense2::Register::new_with_raw_value(
+            self.read_register(regs::Register::TempSense2).await?,
+        )
+        .temp_sense_periodic_enable();
+
+        if !periodic_enabled {
+            let mut start_temp_reading = regs::start_temp_reading::Register::new_with_raw_value(
+                self.read_register(regs::Register::StartTempReading).await?,
+            );
+            let valid_before = start_temp_reading.temp_sensor_valid();
+            start_temp_reading.set_start_temp_reading(false);
+            self.write_register(
+                regs::Register::StartTempReading,
+                start_temp_reading.raw_value(),
+            )
+            .await?;
+            start_temp_reading.set_start_temp_reading(true);
+            self.write_register(
+                regs::Register::StartTempReading,
+                start_temp_reading.raw_value(),
+            )
+            .await?;
+
+            let mut elapsed_us = 0;
+            loop {
+                let current = regs::start_temp_reading::Register::new_with_raw_value(
+                    self.read_register(regs::Register::StartTempReading).await?,
+                );
+                if current.temp_sensor_valid() != valid_before {
+                    break;
+                }
+                if elapsed_us >= POLL_TIMEOUT_US {
+                    return Err(TemperatureReadError::Timeout);
+                }
+                self.inner.delay.delay_us(POLL_INTERVAL_US).await;
+                elapsed_us += POLL_INTERVAL_US;
+            }
+        }
+
+        let mut auxadc_config = regs::auxadc_config::Register::new_with_raw_value(
+            self.read_register(regs::Register::AuxadcConfig).await?,
+        );
+        auxadc_config.set_power_down(true);
+        self.write_register(regs::Register::AuxadcConfig, auxadc_config.raw_value())
+            .await?;
+
+        let raw = self.read_register(regs::Register::Temperature).await?;
+
+        auxadc_config.set_power_down(false);
+        self.write_register(regs::Register::AuxadcConfig, auxadc_config.raw_value())
+            .await?;
+
+        Ok(((i64::from(raw) * 1_000_000 + 570) / 1140) as i32)
     }
 
     /// Configures which internal status signal each of the 4 control output (`CTRL_OUT`) pins
